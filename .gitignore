@@ -1,0 +1,27 @@
+# Xcode
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+*.xcworkspace/*
+!*.xcworkspace/contents.xcworkspacedata
+*.xcuserdata/
+
+# Build
+build/
+DerivedData/
+
+# CocoaPods (if used)
+Pods/
+
+# Swift Package Manager
+.swiftpm/
+.build/
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# Secrets (never commit)
+*.xcconfig
+Secrets/
