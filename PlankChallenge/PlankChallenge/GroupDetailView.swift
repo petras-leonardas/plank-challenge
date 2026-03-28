@@ -237,11 +237,23 @@ struct GroupDetailView: View {
                 VStack(spacing: 0) {
                     ForEach(Array(topEntries.enumerated()), id: \.element.id) { index, entry in
                         let isCurrentUser = leaderboardService.groupCurrentUserRank?.user.id == entry.user.id
-                        GroupLeaderboardRow(
+                        let row = GroupLeaderboardRow(
                             entry: entry,
                             isCurrentUser: isCurrentUser,
                             metric: selectedLeaderboard
                         )
+                        
+                        // Tapping any row except the current user's own row opens their profile
+                        if isCurrentUser {
+                            row
+                        } else {
+                            NavigationLink {
+                                UserProfileView(userId: entry.user.id)
+                            } label: {
+                                row
+                            }
+                            .buttonStyle(.plain)
+                        }
                         
                         if index < topEntries.count - 1 {
                             Divider()
@@ -253,6 +265,7 @@ struct GroupDetailView: View {
                     if let myRank = leaderboardService.groupCurrentUserRank, !currentUserInTop {
                         Divider()
                             .padding(.leading, 60)
+                        // This is always the current user — not tappable
                         GroupLeaderboardRow(
                             entry: myRank,
                             isCurrentUser: true,
