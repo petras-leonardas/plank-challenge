@@ -243,17 +243,12 @@ struct GroupDetailView: View {
                             metric: selectedLeaderboard
                         )
                         
-                        // Tapping any row except the current user's own row opens their profile
-                        if isCurrentUser {
+                        NavigationLink {
+                            UserProfileView(userId: entry.user.id)
+                        } label: {
                             row
-                        } else {
-                            NavigationLink {
-                                UserProfileView(userId: entry.user.id)
-                            } label: {
-                                row
-                            }
-                            .buttonStyle(.plain)
                         }
+                        .buttonStyle(.plain)
                         
                         if index < topEntries.count - 1 {
                             Divider()
