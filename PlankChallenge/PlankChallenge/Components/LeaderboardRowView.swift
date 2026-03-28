@@ -104,10 +104,10 @@ struct LeaderboardRowView: View {
             // Rank Badge
             RankBadge(rank: rank, size: size.rankBadgeSize, font: size.rankFont)
             
-            // Avatar
+            // Avatar — avatarImageName holds a remote URL for profile photos
             AvatarView(
                 text: avatarText,
-                imageName: avatarImageName,
+                imageUrl: avatarImageName,
                 size: size.avatarSize
             )
             
