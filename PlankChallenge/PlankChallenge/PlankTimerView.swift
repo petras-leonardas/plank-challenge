@@ -158,17 +158,11 @@ struct PlankTimerView: View {
                 instructionText
                     .position(x: geometry.size.width / 2, y: centerY - (maxButtonSize / 2) - 50)
                 
-                // Previous planks list - positioned just below the button (8pt gap)
-                if timerState == .completedToday {
-                    previousPlanksStack
-                        .position(x: geometry.size.width / 2, y: centerY + (maxButtonSize / 2) + 8)
-                }
-                
                 // Top bar overlay - fixed at top
+                // Only shown in .ready state — in .completedToday the day is done,
+                // so the manual entry button is hidden (one plank per day).
                 VStack {
-                    // Top bar with plank type selector and manual entry button
-                    // Only visible in ready and completedToday states
-                    if timerState == .ready || timerState == .completedToday {
+                    if timerState == .ready {
                         topBar
                     }
                     Spacer()
@@ -517,7 +511,7 @@ struct PlankTimerView: View {
                 .foregroundStyle(.white)
             
         case .completedToday:
-            // Show checkmark, last plank time, and "Tap to plank again"
+            // Show checkmark and today's plank time — one plank per day
             VStack(spacing: 8) {
                 Image(systemName: "checkmark")
                     .font(.system(size: 24, weight: .bold))
@@ -526,11 +520,6 @@ struct PlankTimerView: View {
                 Text(formattedLastPlank)
                     .font(.system(size: 44, weight: .bold, design: .monospaced))
                     .foregroundStyle(.white)
-                
-                Text("Tap to plank again")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.white.opacity(0.8))
             }
         }
     }
@@ -556,58 +545,7 @@ struct PlankTimerView: View {
     
 
     
-    // MARK: - Previous Planks Stack
-    
-    /// Stack of previous plank times (excluding the last one shown in the button)
-    /// Most recent is closest to the button, oldest at bottom
-    /// Times fade out and shrink as they get older
-    @ViewBuilder
-    private var previousPlanksStack: some View {
-        let times = todayPlankTimes
-        // Get all times except the last one (which is shown in the button)
-        let previousTimes = times.dropLast()
-        
-        if previousTimes.isEmpty {
-            // No previous planks - just show empty space
-            Color.clear.frame(height: 44)
-        } else {
-            // Show previous planks in reverse order (most recent first, closest to button)
-            VStack(spacing: 8) {
-                ForEach(Array(previousTimes.reversed().enumerated()), id: \.offset) { index, duration in
-                    let opacity = opacityForIndex(index, total: previousTimes.count)
-                    let scale = scaleForIndex(index, total: previousTimes.count)
-                    
-                    Text(duration.formattedPlankTime)
-                        .font(.system(size: 16 * scale, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.white.opacity(opacity))
-                }
-            }
-        }
-    }
-    
-    /// Calculate opacity for a plank time based on its position (0 = most recent)
-    private func opacityForIndex(_ index: Int, total: Int) -> Double {
-        // Most recent (index 0) = 0.7, fading down to 0.3 for oldest
-        let minOpacity = 0.25
-        let maxOpacity = 0.7
-        
-        if total <= 1 { return maxOpacity }
-        
-        let progress = Double(index) / Double(total - 1)
-        return maxOpacity - (progress * (maxOpacity - minOpacity))
-    }
-    
-    /// Calculate scale for a plank time based on its position (0 = most recent)
-    private func scaleForIndex(_ index: Int, total: Int) -> Double {
-        // Most recent (index 0) = 1.0, shrinking down to 0.75 for oldest
-        let minScale = 0.75
-        let maxScale = 1.0
-        
-        if total <= 1 { return maxScale }
-        
-        let progress = Double(index) / Double(total - 1)
-        return maxScale - (progress * (maxScale - minScale))
-    }
+
     
     // MARK: - Actions
     
@@ -623,8 +561,9 @@ struct PlankTimerView: View {
             // Ignore taps during celebration
             break
         case .completedToday:
-            // Start another plank
-            startCountdown()
+            // One plank per day — tapping does nothing in this state.
+            // The user can delete via Settings to re-submit.
+            break
         }
     }
     

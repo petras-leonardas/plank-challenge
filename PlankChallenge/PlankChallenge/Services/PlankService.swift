@@ -365,6 +365,7 @@ enum PlankServiceError: LocalizedError, Equatable {
     case unauthorized
     case notFound
     case cannotDeleteOldPlank
+    case plankLimitReached
     case networkError(String)
     case serverError(String)
     case unknown(String)
@@ -377,6 +378,8 @@ enum PlankServiceError: LocalizedError, Equatable {
             return "Plank session not found."
         case .cannotDeleteOldPlank:
             return "You can only delete planks from today."
+        case .plankLimitReached:
+            return "You've already submitted a plank today. Delete it from Settings if you want to re-submit."
         case .networkError(let message):
             return "Network error: \(message)"
         case .serverError(let message):
@@ -400,6 +403,8 @@ enum PlankServiceError: LocalizedError, Equatable {
                 return .notFound
             case "PLANK_DELETE_FORBIDDEN", "FORBIDDEN":
                 return .cannotDeleteOldPlank
+            case "PLANK_LIMIT_REACHED":
+                return .plankLimitReached
             default:
                 return .serverError(apiError.error.message)
             }

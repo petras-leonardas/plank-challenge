@@ -62,10 +62,15 @@ struct ManualEntryView: View {
                             Spacer()
                         }
                     }
-                    .disabled(!isValidDuration || isSubmitting)
+                    .disabled(!isValidDuration || isSubmitting || plankService.hasPlankToday)
                 } footer: {
-                    Text("You can only add planks for today. You can edit or delete them until midnight.")
-                        .font(.caption)
+                    if plankService.hasPlankToday {
+                        Text("You've already submitted a plank today. Delete it from Settings to re-submit.")
+                            .font(.caption)
+                    } else {
+                        Text("One plank per day. Your time will be saved to today's record.")
+                            .font(.caption)
+                    }
                 }
             }
             .navigationTitle("Add Plank")
@@ -113,6 +118,13 @@ struct ManualEntryView: View {
     private func submitEntry() async {
         guard isValidDuration else {
             errorMessage = "Duration must be between 10 seconds and 60 minutes."
+            showingError = true
+            return
+        }
+        
+        // Belt-and-suspenders guard — the button should already be disabled
+        guard !plankService.hasPlankToday else {
+            errorMessage = "You've already submitted a plank today. Delete it from Settings to re-submit."
             showingError = true
             return
         }

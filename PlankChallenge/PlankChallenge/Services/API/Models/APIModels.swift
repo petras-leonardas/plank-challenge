@@ -46,6 +46,7 @@ enum APIErrorCode: String, Decodable, Sendable {
     case serverError = "SERVER_ERROR"
     case conflict = "CONFLICT"
     case plankDeleteForbidden = "PLANK_DELETE_FORBIDDEN"
+    case plankLimitReached = "PLANK_LIMIT_REACHED"
     case groupFull = "GROUP_FULL"
     case alreadyMember = "ALREADY_MEMBER"
     // Note: freeze-specific errors use "CONFLICT" as the code — see StreakService.fromAPIError()

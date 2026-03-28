@@ -485,6 +485,35 @@ planks.post('/', zValidator('json', createPlankSchema), async (c) => {
     return errors.notFound(c, 'User');
   }
 
+  // Enforce one plank per day.
+  // Use the user's stored timezone (falling back to the timezone sent with the
+  // request) so that "today" matches the user's local calendar date.
+  const userTimezone = user.timezone || data.timezone || 'UTC';
+  const performedDate = getDateInTimezone(new Date(data.performedAt), userTimezone);
+  const todayDate = getTodayInTimezone(userTimezone);
+
+  if (performedDate === todayDate) {
+    const existingToday = await db
+      .prepare(`
+        SELECT id FROM plank_sessions
+        WHERE user_id = ? AND deleted_at IS NULL
+          AND date(performed_at) = date(?)
+        LIMIT 1
+      `)
+      .bind(userId, data.performedAt)
+      .first<{ id: string }>();
+
+    if (existingToday) {
+      return c.json({
+        success: false,
+        error: {
+          code: 'PLANK_LIMIT_REACHED',
+          message: "You've already submitted a plank today. Delete it from Settings if you want to re-submit.",
+        },
+      }, 409);
+    }
+  }
+
   // Prepare the plank data
   const plankId = crypto.randomUUID();
   const now = new Date().toISOString();

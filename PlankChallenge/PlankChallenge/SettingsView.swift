@@ -15,8 +15,7 @@ struct SettingsView: View {
     
     @State private var notificationsEnabled = true
     @State private var reminderTime = Date()
-    @State private var showingDiscardAllAlert = false
-    @State private var plankIndexToDelete: Int? = nil
+    @State private var showingDeletePlankConfirm = false
     @State private var isDeleting = false
     @State private var deleteError: String?
     @State private var showingDeleteError = false
@@ -44,16 +43,7 @@ struct SettingsView: View {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
     }
     
-    /// Get today's plank times as an array (most recent last in storage)
-    private var todayPlankTimes: [Double] {
-        guard let data = todayPlankTimesJSON.data(using: .utf8),
-              let times = try? JSONDecoder().decode([Double].self, from: data) else {
-            return []
-        }
-        return times
-    }
-    
-    /// Format today's total plank time
+    /// Format today's total plank time (kept for potential future use)
     private var formattedTodayTime: String {
         let totalSeconds = Int(todayPlankTotalTime)
         let minutes = totalSeconds / 60
@@ -90,73 +80,42 @@ struct SettingsView: View {
                     Text("Plays countdown beeps and a chime when your plank ends")
                 }
                 
-                // Data Management Section - Today's Planks
+                // Today's Plank — one plank per day
                 Section {
-                    if todayPlankTimes.isEmpty {
+                    if let todaysPlank = plankService.todaysPlank {
                         HStack {
-                            Text("Nothing yet today — go hold a plank")
-                                .foregroundStyle(.secondary)
+                            Text(todaysPlank.durationSeconds.formattedPlankTime)
+                                .font(.system(.body, design: .monospaced))
+                            Spacer()
+                            if isDeleting {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                            } else {
+                                Text("Today")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
-                        .accessibilityLabel("No planks recorded today")
+                        .accessibilityLabel("Today's plank: \(todaysPlank.durationSeconds.formattedPlankTime)")
+                        .accessibilityHint("Swipe left to delete")
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                showingDeletePlankConfirm = true
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                            .disabled(isDeleting)
+                        }
                     } else {
-                        // List of planks - most recent first (reversed from storage order)
-                        ForEach(Array(todayPlankTimes.reversed().enumerated()), id: \.offset) { index, duration in
-                            HStack {
-                                Text(duration.formattedPlankTime)
-                                    .font(.system(.body, design: .monospaced))
-                                Spacer()
-                                if index == 0 {
-                                    Text("Latest")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .accessibilityLabel("Plank duration \(duration.formattedPlankTime)\(index == 0 ? ", latest" : "")")
-                            .accessibilityHint("Swipe left to delete, or use context menu")
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) {
-                                    // Convert display index back to storage index
-                                    let storageIndex = todayPlankTimes.count - 1 - index
-                                    plankIndexToDelete = storageIndex
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
-                            .contextMenu {
-                                Button(role: .destructive) {
-                                    let storageIndex = todayPlankTimes.count - 1 - index
-                                    plankIndexToDelete = storageIndex
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
-                        }
-                        
-                        // Discard All button
-                        Button(role: .destructive) {
-                            showingDiscardAllAlert = true
-                        } label: {
-                            HStack {
-                                Spacer()
-                                if isDeleting {
-                                    ProgressView()
-                                        .progressViewStyle(.circular)
-                                        .scaleEffect(0.8)
-                                } else {
-                                    Text("Discard All")
-                                }
-                                Spacer()
-                            }
-                        }
-                        .disabled(isDeleting)
-                        .accessibilityLabel("Discard all planks")
-                        .accessibilityHint("Remove all planks recorded today")
+                        Text("Nothing yet today — go hold a plank")
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("No plank recorded today")
                     }
                 } header: {
-                    Text("Today's Planks")
+                    Text("Today's Plank")
                 } footer: {
-                    if !todayPlankTimes.isEmpty {
-                        Text("Swipe left on a plank to delete it")
+                    if plankService.hasPlankToday {
+                        Text("Swipe left to delete today's plank. You can re-submit after deleting.")
                     }
                 }
                 
@@ -218,37 +177,18 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
-            // Alert for deleting individual plank
-            .alert("Delete this plank?", isPresented: .init(
-                get: { plankIndexToDelete != nil },
-                set: { if !$0 { plankIndexToDelete = nil } }
-            )) {
-                Button("Cancel", role: .cancel) {
-                    plankIndexToDelete = nil
-                }
-                Button("Delete", role: .destructive) {
-                    if let index = plankIndexToDelete {
-                        deletePlank(at: index)
-                    }
-                    plankIndexToDelete = nil
-                }
-            } message: {
-                if let index = plankIndexToDelete, index < todayPlankTimes.count {
-                    Text("Removes your \(todayPlankTimes[index].formattedPlankTime) plank. It can't be undone.")
-                } else {
-                    Text("Removes this plank. It can't be undone.")
-                }
-            }
-            // Alert for discarding all planks
-            .alert("Discard all today's planks?", isPresented: $showingDiscardAllAlert) {
+            // Confirm delete today's plank
+            .alert("Delete today's plank?", isPresented: $showingDeletePlankConfirm) {
                 Button("Cancel", role: .cancel) { }
-                Button("Discard All", role: .destructive) {
-                    Task {
-                        await discardAllPlanks()
-                    }
+                Button("Delete", role: .destructive) {
+                    Task { await deleteTodaysPlank() }
                 }
             } message: {
-                Text("This removes all \(todayPlankCount) plank\(todayPlankCount == 1 ? "" : "s") from today (\(formattedTodayTime) total). It can't be undone.")
+                if let plank = plankService.todaysPlank {
+                    Text("Removes your \(plank.durationSeconds.formattedPlankTime) plank from today. You can re-submit after deleting.")
+                } else {
+                    Text("Removes today's plank. You can re-submit after deleting.")
+                }
             }
             // Error alert for delete failures
             .alert("Delete failed", isPresented: $showingDeleteError) {
@@ -308,89 +248,38 @@ struct SettingsView: View {
     
     // MARK: - Actions
     
-    /// Delete a single plank at the given index (in storage order)
-    private func deletePlank(at index: Int) {
-        var times = todayPlankTimes
-        guard index >= 0 && index < times.count else { return }
+    /// Delete today's single plank from the backend and clear local state.
+    /// After deletion the PlankTimerView will transition back to .ready
+    /// automatically via its onChange(of: todayPlankCount) observer.
+    private func deleteTodaysPlank() async {
+        guard let plank = plankService.todaysPlank else { return }
         
-        // Get the duration to subtract from total
-        let duration = times[index]
-        
-        // Remove from array
-        times.remove(at: index)
-        
-        // Update storage
-        if let data = try? JSONEncoder().encode(times),
-           let json = String(data: data, encoding: .utf8) {
-            todayPlankTimesJSON = json
-        }
-        
-        // Update counts
-        todayPlankTotalTime -= duration
-        todayPlankCount -= 1
-        
-        // Ensure we don't go negative due to floating point issues
-        if todayPlankTotalTime < 0 { todayPlankTotalTime = 0 }
-        if todayPlankCount < 0 { todayPlankCount = 0 }
-        
-        // Note: We only clear local storage here. The planks are already synced to the backend
-        // via PlankService when they were created. If you need to delete from backend,
-        // you would call plankService.deletePlank(id:) - but for "today's planks" management,
-        // we're managing local state since these may not have been synced yet.
-    }
-    
-    /// Discard all of today's planks
-    private func discardAllPlanks() async {
         isDeleting = true
         defer { isDeleting = false }
         
-        // Get today's planks from the service that might need backend deletion
-        let today = ISO8601DateFormatter().string(from: Date()).prefix(10) // YYYY-MM-DD
-        let todaysAPIplanks = plankService.planks.filter { plank in
-            plank.performedAt.hasPrefix(String(today))
-        }
-        
-        // Delete from backend if there are synced planks.
-        // Capture the last successful delete response — it contains the most
-        // up-to-date recalculated streak after all deletions have been applied.
-        var failedCount = 0
-        var lastDeleteResponse: PlankDeleteResponse? = nil
-        for plank in todaysAPIplanks {
-            do {
-                lastDeleteResponse = try await plankService.deletePlank(plank.id)
-            } catch {
-                failedCount += 1
-                #if DEBUG
-                print("[Settings] Failed to delete plank \(plank.id) from backend: \(error)")
-                #endif
-            }
-        }
-        
-        // Apply the inline streak update from the last delete response
-        if let streak = lastDeleteResponse?.streak {
+        do {
+            let response = try await plankService.deletePlank(plank.id)
+            
+            // Apply inline streak update returned by the delete endpoint
+            let streak = response.streak
             streakService.applyInlineStreakUpdate(
                 current: streak.current,
                 longest: streak.longest
             )
-            // Schedule a background full streak refresh
-            Task {
-                try? await streakService.fetchStreak()
-            }
-        }
-        
-        // Mark leaderboard stale — deleting planks may affect the user's rank
-        if lastDeleteResponse != nil {
+            Task { try? await streakService.fetchStreak() }
+            
+            // Mark leaderboard stale — rank may have changed
             leaderboardService.markStale()
-        }
-        
-        // Clear local storage regardless of backend success
-        todayPlankTotalTime = 0
-        todayPlankCount = 0
-        todayPlankTimesJSON = "[]"
-        
-        // Inform the user if any backend deletions failed
-        if failedCount > 0 {
-            deleteError = "\(failedCount) plank\(failedCount == 1 ? "" : "s") could not be removed from the server. Your local data has been cleared, but they may reappear after the next sync."
+            
+            // Clear all local AppStorage plank state.
+            // PlankTimerView observes todayPlankCount and will transition
+            // back to .ready state automatically when it hits 0.
+            todayPlankTotalTime = 0
+            todayPlankCount = 0
+            todayPlankTimesJSON = "[]"
+            
+        } catch {
+            deleteError = error.localizedDescription
             showingDeleteError = true
         }
     }
