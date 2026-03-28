@@ -445,6 +445,7 @@ groups.get('/discover', authMiddleware, async (c) => {
     LEFT JOIN group_members gm_banned ON g.id = gm_banned.group_id AND gm_banned.user_id = ? AND gm_banned.status = 'banned'
     LEFT JOIN join_requests jr ON g.id = jr.group_id AND jr.user_id = ?
     WHERE g.group_type = 'public' AND g.deleted_at IS NULL
+      AND gm.id IS NULL
       AND gm_banned.id IS NULL
   `;
   
