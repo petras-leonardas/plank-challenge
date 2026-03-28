@@ -218,6 +218,7 @@ protocol MediaServiceProtocol: AnyObject {
 
     // MARK: Methods
     func uploadAvatar(image: UIImage) async throws -> String
+    func uploadGroupImage(groupId: String, image: UIImage) async throws -> String
     func deleteAvatar() async throws
     func clearData()
     func clearError()

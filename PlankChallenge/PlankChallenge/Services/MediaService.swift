@@ -75,6 +75,40 @@ final class MediaService: MediaServiceProtocol {
         }
     }
     
+    /// Uploads a cover image for a group and returns the new image URL.
+    ///
+    /// The group must already exist and the caller must be an admin.
+    /// The image is resized and JPEG-compressed before upload.
+    ///
+    /// - Parameters:
+    ///   - groupId: The group to attach the image to.
+    ///   - image: The `UIImage` to upload.
+    /// - Returns: The public URL of the uploaded group image.
+    func uploadGroupImage(groupId: String, image: UIImage) async throws -> String {
+        isUploading = true
+        error = nil
+        defer { isUploading = false }
+        
+        do {
+            let imageData = try compress(image: image)
+            
+            let response: GroupImageUploadResponse = try await APIClient.shared.uploadBinary(
+                "/media/group/\(groupId)",
+                data: imageData,
+                contentType: "image/jpeg"
+            )
+            
+            return response.imageUrl
+        } catch let mediaError as MediaServiceError {
+            self.error = mediaError
+            throw mediaError
+        } catch {
+            let wrapped = MediaServiceError.uploadFailed(error.localizedDescription)
+            self.error = wrapped
+            throw wrapped
+        }
+    }
+    
     /// Deletes the current profile avatar.
     func deleteAvatar() async throws {
         isUploading = true

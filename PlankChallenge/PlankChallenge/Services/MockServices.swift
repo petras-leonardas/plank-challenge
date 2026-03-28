@@ -241,6 +241,9 @@ final class MockMediaService: MediaServiceProtocol {
     func uploadAvatar(image: UIImage) async throws -> String {
         return "https://example.com/mock-avatar.jpg"
     }
+    func uploadGroupImage(groupId: String, image: UIImage) async throws -> String {
+        return "https://example.com/mock-group-image.jpg"
+    }
     func deleteAvatar() async throws { }
     func clearData() { error = nil }
     func clearError() { error = nil }

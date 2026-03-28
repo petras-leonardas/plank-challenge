@@ -996,3 +996,9 @@ struct AvatarUploadResponse: Decodable, Sendable {
     let profileImageUrl: String
     let message: String
 }
+
+/// Response returned from POST /media/group/:groupId
+struct GroupImageUploadResponse: Decodable, Sendable {
+    let imageUrl: String
+    let message: String
+}

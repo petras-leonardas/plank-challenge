@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import PhotosUI
 
 // MARK: - Groups View
 
@@ -477,6 +478,7 @@ struct CompactLeaderboardRow: View {
 struct CreateGroupView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.groupService) private var groupService
+    @Environment(\.mediaService) private var mediaService
     
     @State private var groupName = ""
     @State private var groupDescription = ""
@@ -485,6 +487,10 @@ struct CreateGroupView: View {
     @State private var isCreating = false
     @State private var createError: Error?
     
+    // Photo picker state
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var selectedImage: UIImage?
+    
     private var isValid: Bool {
         !groupName.trimmingCharacters(in: .whitespaces).isEmpty
     }
@@ -492,30 +498,55 @@ struct CreateGroupView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Group Info") {
-                    // Group image
+                // Photo picker — its own section so the card background
+                // doesn't clip the first text field below it
+                Section {
                     HStack {
                         Spacer()
-                        ZStack {
-                            Circle()
-                                .fill(Color.appAccent.opacity(0.2))
-                                .frame(width: 100, height: 100)
-                            
-                            Image(systemName: "camera.fill")
-                                .font(.title)
-                                .foregroundStyle(Color.appAccent)
+                        PhotosPicker(
+                            selection: $selectedPhotoItem,
+                            matching: .images,
+                            photoLibrary: .shared()
+                        ) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.appAccent.opacity(0.15))
+                                    .frame(width: 100, height: 100)
+                                
+                                if let image = selectedImage {
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 100, height: 100)
+                                        .clipShape(Circle())
+                                        .overlay(Circle().stroke(Color.appAccent, lineWidth: 2))
+                                } else {
+                                    VStack(spacing: 4) {
+                                        Image(systemName: "camera.fill")
+                                            .font(.title2)
+                                            .foregroundStyle(Color.appAccent)
+                                        Text("Add Photo")
+                                            .font(.caption2)
+                                            .foregroundStyle(Color.appAccent)
+                                    }
+                                }
+                            }
                         }
+                        .buttonStyle(.plain)
                         Spacer()
                     }
                     .listRowBackground(Color.clear)
-                    
-                    LabeledContent("Group Name") {
+                    .padding(.vertical, 8)
+                }
+                
+                Section("Group Info") {
+                    LabeledContent("Name") {
                         TextField("e.g. Office Core Club", text: $groupName)
                             .multilineTextAlignment(.trailing)
                     }
                     .accessibilityLabel("Group name")
                     
-                    TextField("What's this group about? (optional)", text: $groupDescription, axis: .vertical)
+                    TextField("Description (optional)", text: $groupDescription, axis: .vertical)
                         .lineLimit(3...6)
                         .accessibilityLabel("Group description, optional")
                 }
@@ -568,8 +599,15 @@ struct CreateGroupView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
+                    Button("Cancel") { dismiss() }
+                        .disabled(isCreating)
+                }
+            }
+            .onChange(of: selectedPhotoItem) { _, newItem in
+                Task {
+                    if let data = try? await newItem?.loadTransferable(type: Data.self),
+                       let image = UIImage(data: data) {
+                        selectedImage = image
                     }
                 }
             }
@@ -591,12 +629,18 @@ struct CreateGroupView: View {
         }
         
         do {
-            try await groupService.createGroup(
+            let newGroup = try await groupService.createGroup(
                 name: groupName.trimmingCharacters(in: .whitespaces),
                 description: groupDescription.isEmpty ? nil : groupDescription,
                 groupType: isPrivate ? .friends : .community,
                 joinMode: joinMode
             )
+            
+            // Upload group photo if one was selected (non-fatal — group is created regardless)
+            if let image = selectedImage {
+                try? await mediaService.uploadGroupImage(groupId: newGroup.id, image: image)
+            }
+            
             dismiss()
         } catch {
             createError = error
