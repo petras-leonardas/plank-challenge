@@ -66,7 +66,7 @@ struct GroupMembersListView: View {
         List {
             ForEach(filteredMembers) { member in
                 NavigationLink {
-                    UserProfileView(userId: member.id)
+                    UserProfileView(userId: member.userId)
                 } label: {
                     MemberRow(member: member)
                 }

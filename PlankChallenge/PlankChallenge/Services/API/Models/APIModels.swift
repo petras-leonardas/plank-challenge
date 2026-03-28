@@ -158,6 +158,8 @@ struct APIPublicUser: Decodable, Identifiable, Sendable {
     let displayName: String
     let username: String?
     let profileImageUrl: String?
+    let bio: String?
+    let location: String?
     let currentStreak: Int
     let longestStreak: Int
     let totalPlanks: Int
@@ -661,13 +663,29 @@ struct APIGroup: Decodable, Identifiable, Sendable {
 }
 
 /// Group member model
+/// Matches backend `formatGroupMember` shape:
+/// { id, userId, role, joinedAt, user: { id, displayName, username, profileImageUrl, currentStreak } }
 struct APIGroupMember: Decodable, Identifiable, Sendable {
+    /// The group_members table row ID (used for Identifiable).
     let id: String
-    let displayName: String
-    let username: String?
-    let profileImageUrl: String?
+    /// The actual user ID — use this when navigating to a user profile.
+    let userId: String
     let role: String
     let joinedAt: String
+    let user: MemberUser?
+    
+    struct MemberUser: Decodable, Sendable {
+        let id: String
+        let displayName: String
+        let username: String?
+        let profileImageUrl: String?
+        let currentStreak: Int?
+    }
+    
+    // MARK: - Convenience accessors (keeps existing view code unchanged)
+    var displayName: String { user?.displayName ?? "" }
+    var username: String? { user?.username }
+    var profileImageUrl: String? { user?.profileImageUrl }
 }
 
 /// Request body for creating a group
@@ -683,14 +701,46 @@ struct GroupsListResponse: Decodable {
     let groups: [APIGroup]
 }
 
-/// Response from /groups/:id
+/// Response from GET /groups/:id
+/// The backend returns a flat object (all group fields at the top level) with
+/// optional `isMember` and `role` fields mixed in — there is no nested "group"
+/// or "membership" key. This struct decodes that flat shape and exposes
+/// convenience properties so the rest of the app keeps working unchanged.
 struct GroupDetailResponse: Decodable {
-    let group: APIGroup
-    let membership: MembershipInfo?
+    // Core group fields (always present)
+    let id: String
+    let name: String
+    let description: String?
+    let imageUrl: String?
+    let groupType: String
+    let joinMode: String
+    let memberCount: Int
+    let createdBy: String
+    let inviteCode: String?
+    let createdAt: String
+    let updatedAt: String
+    // Membership fields (present only when the requester is a member)
+    let isMember: Bool?
+    let role: String?
     
-    struct MembershipInfo: Decodable {
+    /// Convenience: reconstruct an `APIGroup` for use in the rest of the app.
+    var group: APIGroup {
+        APIGroup(
+            id: id, name: name, description: description,
+            imageUrl: imageUrl, groupType: groupType, joinMode: joinMode,
+            memberCount: memberCount, createdBy: createdBy,
+            inviteCode: inviteCode, createdAt: createdAt, updatedAt: updatedAt
+        )
+    }
+    
+    /// Convenience: membership info if the user is a member.
+    var membership: MembershipInfo? {
+        guard isMember == true, let role else { return nil }
+        return MembershipInfo(role: role)
+    }
+    
+    struct MembershipInfo {
         let role: String
-        let joinedAt: String
     }
 }
 
@@ -772,7 +822,7 @@ struct RegisterDeviceRequest: Encodable {
 
 /// Pagination metadata
 struct PaginationMeta: Decodable, Sendable {
-    let total: Int
+    let total: Int?  // Not always present (e.g. followers/following endpoints omit it)
     let limit: Int
     let offset: Int
     let hasMore: Bool

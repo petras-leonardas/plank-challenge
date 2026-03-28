@@ -38,8 +38,8 @@ final class GroupService: GroupServiceProtocol {
     /// Currently selected group's members
     private(set) var currentGroupMembers: [APIGroupMember] = []
     
-    /// Current user's membership info for the currently viewed group
-    private(set) var currentMembership: GroupDetailResponse.MembershipInfo?
+    /// Current user's membership role for the currently viewed group (nil = not a member)
+    private(set) var currentMembershipRole: String?
     
     /// The currently viewed group detail
     private(set) var currentGroup: APIGroup?
@@ -119,7 +119,7 @@ final class GroupService: GroupServiceProtocol {
         do {
             let response: GroupDetailResponse = try await APIClient.shared.get("/groups/\(groupId)")
             currentGroup = response.group
-            currentMembership = response.membership
+            currentMembershipRole = response.membership?.role
             return response.group
         } catch let apiError as APIClientError {
             let serviceError = GroupServiceError.fromAPIError(apiError)
@@ -139,13 +139,12 @@ final class GroupService: GroupServiceProtocol {
     
     /// Checks if user is admin of the currently loaded group
     var isCurrentUserAdmin: Bool {
-        guard let membership = currentMembership else { return false }
-        return membership.role == "admin" || membership.role == "owner"
+        currentMembershipRole == "admin" || currentMembershipRole == "owner"
     }
     
     /// Checks if user is a member of the currently loaded group
     var isCurrentUserMember: Bool {
-        currentMembership != nil
+        currentMembershipRole != nil
     }
     
     /// Fetches members of a group
@@ -324,7 +323,7 @@ final class GroupService: GroupServiceProtocol {
         myGroups = []
         discoverGroups = []
         currentGroupMembers = []
-        currentMembership = nil
+        currentMembershipRole = nil
         currentGroup = nil
         hasLoaded = false
         error = nil
@@ -333,7 +332,7 @@ final class GroupService: GroupServiceProtocol {
     /// Clears current group selection (call when navigating away from detail view)
     func clearCurrentGroup() {
         currentGroup = nil
-        currentMembership = nil
+        currentMembershipRole = nil
         currentGroupMembers = []
     }
     
