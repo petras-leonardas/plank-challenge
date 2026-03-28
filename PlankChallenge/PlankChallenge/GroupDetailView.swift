@@ -24,6 +24,7 @@ struct GroupDetailView: View {
     /// Used to guard .task(id: selectedLeaderboard) against firing before
     /// the initial group load has finished.
     @State private var hasInitiallyLoaded = false
+    @State private var showingSettings = false
     
     enum LeaderboardType: String, CaseIterable {
         case streak = "Streak"
@@ -56,14 +57,17 @@ struct GroupDetailView: View {
         .toolbar {
             if groupService.isCurrentUserAdmin {
                 ToolbarItem(placement: .primaryAction) {
-                    NavigationLink {
-                        GroupSettingsView(groupId: groupId)
+                    Button {
+                        showingSettings = true
                     } label: {
                         Image(systemName: "gearshape")
                     }
                     .accessibilityLabel("Group settings")
                 }
             }
+        }
+        .sheet(isPresented: $showingSettings) {
+            GroupSettingsView(groupId: groupId)
         }
         .alert("Leave this group?", isPresented: $showingLeaveConfirmation) {
             Button("Cancel", role: .cancel) {}
