@@ -318,6 +318,27 @@ final class GroupService: GroupServiceProtocol {
         return groupId.unicodeScalars.allSatisfy { allowedCharacters.contains($0) }
     }
     
+    /// Patches the imageUrl of a group in the in-memory lists without a network call.
+    /// Call this immediately after a successful group image upload so the list
+    /// reflects the new photo without requiring a full re-fetch.
+    func updateGroupImage(groupId: String, imageUrl: String) {
+        // APIGroup is a struct so we must replace the whole value
+        myGroups = myGroups.map { group in
+            guard group.id == groupId else { return group }
+            return APIGroup(
+                id: group.id, name: group.name, description: group.description,
+                imageUrl: imageUrl, groupType: group.groupType, joinMode: group.joinMode,
+                memberCount: group.memberCount, createdBy: group.createdBy,
+                inviteCode: group.inviteCode, createdAt: group.createdAt,
+                updatedAt: group.updatedAt
+            )
+        }
+        // Also patch currentGroup if it happens to be the same group
+        if currentGroup?.id == groupId {
+            currentGroup = myGroups.first { $0.id == groupId }
+        }
+    }
+
     /// Clears local data (call on logout)
     func clearData() {
         myGroups = []

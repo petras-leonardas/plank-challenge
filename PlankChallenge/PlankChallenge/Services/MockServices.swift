@@ -159,6 +159,7 @@ final class MockGroupService: GroupServiceProtocol {
     func createGroup(name: String, description: String?, groupType: APIGroupType, joinMode: APIJoinMode) async throws -> APIGroup {
         fatalError("MockGroupService.createGroup not implemented")
     }
+    func updateGroupImage(groupId: String, imageUrl: String) { }
     func clearData() {
         myGroups = []
         discoverGroups = []

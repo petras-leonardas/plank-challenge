@@ -631,9 +631,12 @@ struct CreateGroupView: View {
                 joinMode: joinMode
             )
             
-            // Upload group photo if one was selected (non-fatal — group is created regardless)
-            if let image = selectedImage {
-                try? await mediaService.uploadGroupImage(groupId: newGroup.id, image: image)
+            // Upload group photo if one was selected (non-fatal — group is created regardless).
+            // Capture the returned URL and patch the in-memory list immediately so the
+            // group card shows the photo without needing a full re-fetch.
+            if let image = selectedImage,
+               let newImageUrl = try? await mediaService.uploadGroupImage(groupId: newGroup.id, image: image) {
+                groupService.updateGroupImage(groupId: newGroup.id, imageUrl: newImageUrl)
             }
             
             dismiss()

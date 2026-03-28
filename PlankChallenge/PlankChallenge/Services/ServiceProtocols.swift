@@ -145,6 +145,7 @@ protocol GroupServiceProtocol: AnyObject {
     func joinGroup(id groupId: String) async throws
     func leaveGroup(id groupId: String) async throws
     func createGroup(name: String, description: String?, groupType: APIGroupType, joinMode: APIJoinMode) async throws -> APIGroup
+    func updateGroupImage(groupId: String, imageUrl: String)
     func clearData()
     func clearCurrentGroup()
     func clearError()
