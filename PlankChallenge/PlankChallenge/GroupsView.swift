@@ -509,8 +509,11 @@ struct CreateGroupView: View {
                     }
                     .listRowBackground(Color.clear)
                     
-                    TextField("e.g. Office Core Club", text: $groupName)
-                        .accessibilityLabel("Group name")
+                    LabeledContent("Group Name") {
+                        TextField("e.g. Office Core Club", text: $groupName)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    .accessibilityLabel("Group name")
                     
                     TextField("What's this group about? (optional)", text: $groupDescription, axis: .vertical)
                         .lineLimit(3...6)
