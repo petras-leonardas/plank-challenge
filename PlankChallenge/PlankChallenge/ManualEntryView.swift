@@ -9,20 +9,26 @@ import SwiftUI
 
 struct ManualEntryView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.plankService) private var plankService
+    @Environment(\.streakService) private var streakService
+    @Environment(\.badgeService) private var badgeService
+    @Environment(\.leaderboardService) private var leaderboardService
+    
     @State private var minutes: Int = 1
     @State private var seconds: Int = 0
-    @State private var selectedPlankType: Constants.Plank.PlankType = .elbow
     @State private var showingError = false
     @State private var errorMessage = ""
+    @State private var isSubmitting = false
     
-    private var mockData: MockDataService { MockDataService.shared }
+    /// Minimum duration for manual entry (10 seconds)
+    private static let minimumManualDurationSeconds: TimeInterval = 10
     
     private var totalSeconds: TimeInterval {
         TimeInterval(minutes * 60 + seconds)
     }
     
     private var isValidDuration: Bool {
-        totalSeconds >= Constants.Plank.minimumDurationSeconds &&
+        totalSeconds >= Self.minimumManualDurationSeconds &&
         totalSeconds <= Constants.Plank.maximumDurationSeconds
     }
     
@@ -34,53 +40,50 @@ struct ManualEntryView: View {
                 } header: {
                     Text("Duration")
                 } footer: {
-                    Text("Minimum: 10 seconds • Maximum: 1 hour")
+                    Text("Min: 10 seconds · Max: 60 minutes")
                         .font(.caption)
-                }
-                
-                Section("Plank Type") {
-                    Picker("Type", selection: $selectedPlankType) {
-                        ForEach(Constants.Plank.PlankType.allCases, id: \.self) { type in
-                            Text(type.rawValue).tag(type)
-                        }
-                    }
-                    .pickerStyle(.menu)
                 }
                 
                 Section {
                     Button {
-                        submitEntry()
+                        Task {
+                            await submitEntry()
+                        }
                     } label: {
                         HStack {
                             Spacer()
-                            Text("Submit Plank")
-                                .fontWeight(.semibold)
+                            if isSubmitting {
+                                ProgressView()
+                                    .progressViewStyle(.circular)
+                            } else {
+                                Text("Add Plank")
+                                    .fontWeight(.semibold)
+                            }
                             Spacer()
                         }
                     }
-                    .disabled(!isValidDuration)
+                    .disabled(!isValidDuration || isSubmitting)
                 } footer: {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Manual entries can only be submitted for today.")
-                        Text("You can delete and re-enter until the end of the day.")
-                    }
-                    .font(.caption)
+                    Text("You can only add planks for today. You can edit or delete them until midnight.")
+                        .font(.caption)
                 }
             }
-            .navigationTitle("Manual Entry")
+            .navigationTitle("Add Plank")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .disabled(isSubmitting)
                 }
             }
-            .alert("Error", isPresented: $showingError) {
+            .alert("Couldn't add plank", isPresented: $showingError) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(errorMessage)
             }
+            .interactiveDismissDisabled(isSubmitting)
         }
     }
     
@@ -93,6 +96,7 @@ struct ManualEntryView: View {
             }
             .pickerStyle(.wheel)
             .frame(width: 120)
+            .disabled(isSubmitting)
             
             Picker("Seconds", selection: $seconds) {
                 ForEach(0..<60, id: \.self) { second in
@@ -101,27 +105,62 @@ struct ManualEntryView: View {
             }
             .pickerStyle(.wheel)
             .frame(width: 120)
+            .disabled(isSubmitting)
         }
         .frame(height: 150)
     }
     
-    private func submitEntry() {
+    private func submitEntry() async {
         guard isValidDuration else {
-            errorMessage = "Please enter a valid duration between 10 seconds and 1 hour."
+            errorMessage = "Duration must be between 10 seconds and 60 minutes."
             showingError = true
             return
         }
         
-        let session = PlankSession(
-            durationSeconds: totalSeconds,
-            plankType: selectedPlankType,
-            inputMethod: .manual
-        )
-        mockData.addPlankSession(session)
-        dismiss()
+        isSubmitting = true
+        defer { isSubmitting = false }
+        
+        do {
+            let response = try await plankService.createPlank(
+                durationSeconds: totalSeconds,
+                inputMethod: .manual
+            )
+            
+            // Apply streak data returned inline — no extra network round-trip needed
+            if let streak = response.streak {
+                streakService.applyInlineStreakUpdate(
+                    current: streak.current,
+                    longest: streak.longest
+                )
+            }
+            
+            // If new badges were earned, fetch the full badge list
+            if let badges = response.badges, !badges.newlyEarned.isEmpty {
+                try? await badgeService.fetchAvailableBadges()
+            }
+            
+            // Mark leaderboard stale — user's rank may have changed after this plank
+            leaderboardService.markStale()
+            
+            // Schedule a background full streak refresh to pick up calendar
+            // activity, freeze tokens, and other fields not in the inline response
+            Task {
+                try? await streakService.fetchStreak()
+            }
+            
+            dismiss()
+            
+        } catch let error as PlankServiceError {
+            errorMessage = error.localizedDescription
+            showingError = true
+        } catch {
+            errorMessage = "Something went wrong. Try again."
+            showingError = true
+        }
     }
 }
 
 #Preview {
     ManualEntryView()
+        .withMockServices()
 }

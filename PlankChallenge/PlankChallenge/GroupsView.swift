@@ -10,9 +10,8 @@ import SwiftUI
 // MARK: - Groups View
 
 struct GroupsView: View {
-    private var mockData: MockDataService { MockDataService.shared }
+    @Environment(\.groupService) private var groupService
     @State private var showingCreateGroup = false
-    @State private var showingSearch = false
     
     var body: some View {
         NavigationStack {
@@ -20,45 +19,69 @@ struct GroupsView: View {
                 // App background with subtle gradient
                 AppBackground()
                 
-                ScrollView {
-                    VStack(spacing: 24) {
-                        // My Groups Section
-                        myGroupsSection
-                        
-                        // Discover Groups Section
-                        discoverGroupsSection
-                        
-                        // Global Leaderboard Section
-                        globalLeaderboardSection
+                Group {
+                    if groupService.isLoading && !groupService.hasLoaded {
+                        loadingView
+                    } else if let error = groupService.error, !groupService.hasLoaded {
+                        ErrorView(error: error) {
+                            await loadData()
+                        }
+                    } else {
+                        contentView
                     }
-                    .padding(.vertical, 16)
                 }
             }
             .navigationTitle("Groups")
-            .toolbarBackground(Color.subtleBlueGradientStart.opacity(0.5), for: .navigationBar)
+            .appNavigationBarStyle()
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 16) {
-                        Button {
-                            showingSearch = true
-                        } label: {
-                            Image(systemName: "magnifyingglass")
-                        }
-                        
-                        Button {
-                            showingCreateGroup = true
-                        } label: {
-                            Image(systemName: "plus")
-                        }
+                    Button {
+                        showingCreateGroup = true
+                    } label: {
+                        Image(systemName: "plus")
                     }
+                    .accessibilityLabel("Create new group")
                 }
             }
             .sheet(isPresented: $showingCreateGroup) {
                 CreateGroupView()
             }
-            .fullScreenCover(isPresented: $showingSearch) {
-                SearchView(isPresented: $showingSearch)
+            .refreshable {
+                await loadData()
             }
+            .task {
+                if !groupService.hasLoaded {
+                    await loadData()
+                }
+            }
+        }
+    }
+    
+    // MARK: - Subviews
+    
+    private var loadingView: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+            Text("Loading groups...")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    private var contentView: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                // My Groups Section
+                myGroupsSection
+                
+                // Discover Groups Section
+                discoverGroupsSection
+                
+                // Global Leaderboard Section
+                globalLeaderboardSection
+            }
+            .padding(.vertical, 16)
         }
     }
     
@@ -67,35 +90,26 @@ struct GroupsView: View {
     private var myGroupsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Section Header
-            HStack {
-                Text("MY GROUPS")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                
-                Spacer()
-                
-                if mockData.myGroups.count > 3 {
-                    NavigationLink {
+            Group {
+                if groupService.myGroups.count > 3 {
+                    AppSectionHeader(title: "MY GROUPS") {
                         MyGroupsListView()
-                    } label: {
-                        Text("See All")
-                            .font(.subheadline)
-                            .foregroundStyle(Color.appAccent)
                     }
+                } else {
+                    AppSectionHeader<EmptyView>(title: "MY GROUPS")
                 }
             }
             .padding(.horizontal, 16)
             
-            if mockData.myGroups.isEmpty {
+            if groupService.myGroups.isEmpty {
                 // Empty State
                 emptyMyGroupsState
             } else {
-                // Show top 3 groups (sorted by recent activity)
+                // Show top 3 groups (sorted by most recent update)
                 VStack(spacing: 8) {
-                    ForEach(Array(mockData.myGroupsSortedByActivity.prefix(3))) { group in
+                    ForEach(Array(sortedMyGroups.prefix(3))) { group in
                         NavigationLink {
-                            GroupDetailView(group: group)
+                            GroupDetailView(groupId: group.id)
                         } label: {
                             MyGroupRowCard(group: group)
                         }
@@ -105,6 +119,11 @@ struct GroupsView: View {
                 .padding(.horizontal, 16)
             }
         }
+    }
+    
+    /// My groups sorted by most recent activity (updatedAt)
+    private var sortedMyGroups: [APIGroup] {
+        groupService.myGroups.sorted { $0.updatedDate > $1.updatedDate }
     }
     
     // MARK: - Empty My Groups State
@@ -118,7 +137,7 @@ struct GroupsView: View {
             Text("No groups yet")
                 .font(.headline)
             
-            Text("Join a group or create your own to compete with others!")
+            Text("Groups are where things get competitive. Create one or join an existing group to get on a shared leaderboard.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -126,24 +145,16 @@ struct GroupsView: View {
             Button {
                 showingCreateGroup = true
             } label: {
-                Text("Create Group")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(Color.appAccent)
-                    .clipShape(Capsule())
+                Text("Create a group")
             }
+            .pillButtonStyle(isSelected: true)
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
+        .appCardStyle()
         .padding(.horizontal, 16)
-        .background(Color.warmWhiteCard)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
-        .padding(.horizontal, 16)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("No groups yet. Join a group or create your own to compete with others.")
     }
     
     // MARK: - Discover Groups Section
@@ -151,25 +162,19 @@ struct GroupsView: View {
     private var discoverGroupsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Section Header
-            Text("DISCOVER GROUPS")
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
+            AppSectionHeader<EmptyView>(title: "DISCOVER GROUPS")
                 .padding(.horizontal, 16)
             
-            if mockData.discoverGroups.isEmpty {
+            if groupService.discoverGroups.isEmpty {
                 Text("No public groups available")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
-                    .background(Color.warmWhiteCard)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
+                    .appCardStyleCompact()
                     .padding(.horizontal, 16)
             } else {
                 VStack(spacing: 8) {
-                    ForEach(mockData.discoverGroups) { group in
+                    ForEach(groupService.discoverGroups) { group in
                         DiscoverGroupRowCard(group: group)
                     }
                 }
@@ -183,35 +188,128 @@ struct GroupsView: View {
     private var globalLeaderboardSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Section Header
-            Text("GLOBAL LEADERBOARD")
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
+            AppSectionHeader<EmptyView>(title: "GLOBAL LEADERBOARD")
                 .padding(.horizontal, 16)
             
             CompactLeaderboardView()
                 .padding(.horizontal, 16)
         }
     }
+    
+    // MARK: - Data Loading
+    
+    private func loadData() async {
+        do {
+            // Load both my groups and discover groups in parallel
+            async let myGroupsTask: () = groupService.fetchMyGroups()
+            async let discoverTask: () = groupService.fetchDiscoverGroups()
+            
+            _ = try await (myGroupsTask, discoverTask)
+        } catch {
+            // Errors are stored in service
+        }
+    }
 }
 
-// MARK: - Discover Group Row Card
+// MARK: - My Group Row Card (uses APIGroup)
 
-struct DiscoverGroupRowCard: View {
-    let group: MockGroup
-    @State private var isJoining = false
+struct MyGroupRowCard: View {
+    let group: APIGroup
     
     var body: some View {
         HStack(spacing: 12) {
             // Group image placeholder
             ZStack {
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.orange.opacity(0.15))
+                    .fill(Color.appAccent.opacity(0.15))
                     .frame(width: 56, height: 56)
                 
-                Image(systemName: "person.3.fill")
-                    .font(.title3)
-                    .foregroundStyle(.orange)
+                if let imageUrl = group.imageUrl {
+                    AsyncImage(url: URL(string: imageUrl)) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Image(systemName: "person.3.fill")
+                            .font(.title3)
+                            .foregroundStyle(Color.appAccent)
+                    }
+                    .frame(width: 56, height: 56)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                } else {
+                    Image(systemName: "person.3.fill")
+                        .font(.title3)
+                        .foregroundStyle(Color.appAccent)
+                }
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(group.name)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    
+                    if group.isPrivate {
+                        Image(systemName: "lock.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                
+                Text("\(group.memberCount) members")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            
+            Spacer()
+            
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .appCardStyleCompact()
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(group.name), \(group.memberCount) members")
+        .accessibilityHint("Tap to view group details")
+    }
+}
+
+// MARK: - Discover Group Row Card (uses APIGroup)
+
+struct DiscoverGroupRowCard: View {
+    let group: APIGroup
+    @Environment(\.groupService) private var groupService
+    
+    @State private var isJoining = false
+    @State private var showingJoinError = false
+    @State private var joinErrorMessage: String?
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Group image placeholder
+            ZStack {
+                RoundedRectangle(cornerRadius: Constants.UI.cardRadius)
+                    .fill(Color.appAccent.opacity(0.15))
+                    .frame(width: 56, height: 56)
+                
+                if let imageUrl = group.imageUrl {
+                    AsyncImage(url: URL(string: imageUrl)) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Image(systemName: "person.3.fill")
+                            .font(.title3)
+                            .foregroundStyle(Color.appAccent)
+                    }
+                    .frame(width: 56, height: 56)
+                    .clipShape(RoundedRectangle(cornerRadius: Constants.UI.cardRadius))
+                } else {
+                    Image(systemName: "person.3.fill")
+                        .font(.title3)
+                        .foregroundStyle(Color.appAccent)
+                }
             }
             
             VStack(alignment: .leading, spacing: 4) {
@@ -225,8 +323,8 @@ struct DiscoverGroupRowCard: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     
-                    if group.joinMode == .requestToJoin {
-                        Text("Request to join")
+                    if group.requiresApproval {
+                        Text("Approval required")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -236,40 +334,50 @@ struct DiscoverGroupRowCard: View {
             Spacer()
             
             // Join button
-            Button {
-                isJoining = true
-                // TODO: Implement join logic
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    isJoining = false
-                }
-            } label: {
+            Group {
                 if isJoining {
                     ProgressView()
                         .scaleEffect(0.8)
+                        .frame(width: 70, height: 32)
                 } else {
-                    Text(group.joinMode == .requestToJoin ? "Request" : "Join")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(Color.appAccent)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(Color.appAccent.opacity(0.1))
-                        .clipShape(Capsule())
+                    Button {
+                        Task { await joinGroup() }
+                    } label: {
+                        Text(group.requiresApproval ? "Request to join" : "Join")
+                    }
+                    .pillButtonStyle(isSelected: false)
+                    .disabled(isJoining)
                 }
             }
-            .buttonStyle(.plain)
         }
-        .padding(12)
-        .background(Color.warmWhiteCard)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
+        .appCardStyleCompact()
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(group.name), \(group.memberCount) members")
+        .accessibilityHint(group.requiresApproval ? "Tap to request to join" : "Tap to join group")
+        .alert("Couldn't join", isPresented: $showingJoinError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(joinErrorMessage ?? "Something went wrong. Try again.")
+        }
+    }
+    
+    private func joinGroup() async {
+        isJoining = true
+        defer { isJoining = false }
+        
+        do {
+            try await groupService.joinGroup(id: group.id)
+        } catch {
+            joinErrorMessage = error.localizedDescription
+            showingJoinError = true
+        }
     }
 }
 
 // MARK: - Compact Leaderboard View (Top 5 + Current User)
 
 struct CompactLeaderboardView: View {
-    private var mockData: MockDataService { MockDataService.shared }
+    @Environment(\.leaderboardService) private var leaderboardService
     @State private var selectedTab: LeaderboardTab = .streak
     
     var body: some View {
@@ -284,99 +392,80 @@ struct CompactLeaderboardView: View {
             .padding(.horizontal, 12)
             .padding(.top, 12)
             .padding(.bottom, 8)
+            .onChange(of: selectedTab) { _, newTab in
+                Task { await loadLeaderboard(for: newTab) }
+            }
             
             // Leaderboard entries
-            VStack(spacing: 0) {
-                // Top 5
-                ForEach(Array(topUsers.prefix(5).enumerated()), id: \.element.id) { index, user in
-                    CompactLeaderboardRow(
-                        rank: index + 1,
-                        user: user,
-                        displayValue: displayValue(for: user)
-                    )
-                    
-                    if index < 4 {
-                        Divider()
-                            .padding(.horizontal, 12)
-                    }
-                }
+            if leaderboardService.isLoading {
+                ProgressView()
+                    .padding(.vertical, 40)
+            } else if leaderboardService.globalLeaderboard.isEmpty {
+                Text("No leaderboard data")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 40)
+            } else {
+                leaderboardContent
+            }
+        }
+        .appCardStyle()
+        .task {
+            await loadLeaderboard(for: selectedTab)
+        }
+    }
+    
+    private var leaderboardContent: some View {
+        VStack(spacing: 0) {
+            // Top 5
+            ForEach(Array(leaderboardService.globalLeaderboard.prefix(5).enumerated()), id: \.element.id) { index, entry in
+                CompactLeaderboardRow(entry: entry)
                 
-                // Separator if current user is not in top 5
-                if let currentUser = currentUserEntry, currentUser.rank > 5 {
-                    HStack {
-                        ForEach(0..<3) { _ in
-                            Circle()
-                                .fill(Color.secondary.opacity(0.3))
-                                .frame(width: 4, height: 4)
-                        }
-                    }
-                    .padding(.vertical, 8)
-                    
-                    CompactLeaderboardRow(
-                        rank: currentUser.rank,
-                        user: currentUser,
-                        displayValue: displayValue(for: currentUser)
-                    )
+                if index < min(4, leaderboardService.globalLeaderboard.count - 1) {
+                    Divider()
+                        .padding(.horizontal, 12)
                 }
             }
-            .padding(.bottom, 12)
+            
+            // Separator if current user is not in top 5
+            if let userRank = leaderboardService.userGlobalRank, userRank.rank > 5 {
+                HStack {
+                    ForEach(0..<3, id: \.self) { _ in
+                        Circle()
+                            .fill(Color.secondary.opacity(0.3))
+                            .frame(width: 4, height: 4)
+                    }
+                }
+                .padding(.vertical, 8)
+                
+                CompactLeaderboardRow(entry: userRank)
+            }
         }
-        .background(Color.warmWhiteCard)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+        .padding(.bottom, 12)
     }
     
-    private var topUsers: [LeaderboardUser] {
-        switch selectedTab {
-        case .streak:
-            return mockData.leaderboardUsers.sorted { $0.currentStreak > $1.currentStreak }
-        case .longestPlank:
-            return mockData.leaderboardUsers.sorted { $0.longestPlankSeconds > $1.longestPlankSeconds }
-        }
-    }
-    
-    private var currentUserEntry: LeaderboardUser? {
-        let sorted = topUsers
-        if let index = sorted.firstIndex(where: { $0.isCurrentUser }) {
-            var user = sorted[index]
-            // Create a new user with updated rank
-            return LeaderboardUser(
-                rank: index + 1,
-                displayName: user.displayName,
-                currentStreak: user.currentStreak,
-                longestPlankSeconds: user.longestPlankSeconds,
-                isCurrentUser: true,
-                badges: user.badges
-            )
-        }
-        return nil
-    }
-    
-    private func displayValue(for user: LeaderboardUser) -> String {
-        switch selectedTab {
-        case .streak:
-            return "\(user.currentStreak) days"
-        case .longestPlank:
-            return user.longestPlankFormatted
+    private func loadLeaderboard(for tab: LeaderboardTab) async {
+        let type: LeaderboardService.LeaderboardType = tab == .streak ? .streak : .longestPlank
+        do {
+            try await leaderboardService.fetchGlobalLeaderboard(type: type, period: .weekly, limit: 5)
+        } catch {
+            // Error handled in service
         }
     }
 }
 
-// MARK: - Compact Leaderboard Row
-// Now uses LeaderboardRowView component from Components/LeaderboardRowView.swift
+// MARK: - Compact Leaderboard Row (uses APILeaderboardEntry)
 
 struct CompactLeaderboardRow: View {
-    let rank: Int
-    let user: LeaderboardUser
-    let displayValue: String
+    let entry: APILeaderboardEntry
     
     var body: some View {
         LeaderboardRowView(
-            rank: rank,
-            name: user.displayName,
-            avatarText: String(user.displayName.prefix(1)),
-            displayValue: displayValue,
-            isCurrentUser: user.isCurrentUser,
+            rank: entry.rank,
+            name: entry.user.displayName,
+            avatarText: String(entry.user.displayName.prefix(1)),
+            displayValue: entry.scoreLabel,
+            isCurrentUser: entry.isCurrentUser,
             avatarImageName: nil,
             size: .compact
         )
@@ -387,10 +476,14 @@ struct CompactLeaderboardRow: View {
 
 struct CreateGroupView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.groupService) private var groupService
+    
     @State private var groupName = ""
     @State private var groupDescription = ""
     @State private var isPrivate = false
     @State private var requiresApproval = false
+    @State private var isCreating = false
+    @State private var createError: Error?
     
     private var isValid: Bool {
         !groupName.trimmingCharacters(in: .whitespaces).isEmpty
@@ -416,46 +509,59 @@ struct CreateGroupView: View {
                     }
                     .listRowBackground(Color.clear)
                     
-                    TextField("Group Name", text: $groupName)
+                    TextField("e.g. Office Core Club", text: $groupName)
+                        .accessibilityLabel("Group name")
                     
-                    TextField("Description (optional)", text: $groupDescription, axis: .vertical)
+                    TextField("What's this group about? (optional)", text: $groupDescription, axis: .vertical)
                         .lineLimit(3...6)
+                        .accessibilityLabel("Group description, optional")
                 }
                 
                 Section {
-                    Toggle("Private Group", isOn: $isPrivate)
+                    Toggle("Private group", isOn: $isPrivate)
+                        .accessibilityHint("Private groups are not searchable. You'll need to invite members.")
                     
                     if !isPrivate {
-                        Toggle("Require Approval to Join", isOn: $requiresApproval)
+                        Toggle("Require approval to join", isOn: $requiresApproval)
+                            .accessibilityHint("You'll need to approve each join request.")
                     }
                 } header: {
                     Text("Privacy")
                 } footer: {
                     if isPrivate {
-                        Text("Private groups are not searchable. You'll need to invite members.")
+                        Text("Only people you invite can find or join this group.")
                     } else if requiresApproval {
-                        Text("You'll need to approve each join request.")
+                        Text("Anyone can find it, but you'll approve each request.")
                     } else {
                         Text("Anyone can find and join this group.")
                     }
                 }
                 
+                if let error = createError {
+                    Section {
+                        CompactErrorView(error.localizedDescription)
+                    }
+                }
+                
                 Section {
                     Button {
-                        // Create group
-                        dismiss()
+                        Task { await createGroup() }
                     } label: {
                         HStack {
                             Spacer()
-                            Text("Create Group")
-                                .fontWeight(.semibold)
+                            if isCreating {
+                                ProgressView()
+                            } else {
+                                Text("Create Group")
+                                    .fontWeight(.semibold)
+                            }
                             Spacer()
                         }
                     }
-                    .disabled(!isValid)
+                    .disabled(!isValid || isCreating)
                 }
             }
-            .navigationTitle("Create Group")
+            .navigationTitle("New Group")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -466,8 +572,36 @@ struct CreateGroupView: View {
             }
         }
     }
+    
+    private func createGroup() async {
+        isCreating = true
+        createError = nil
+        defer { isCreating = false }
+        
+        let joinMode: APIJoinMode
+        if isPrivate {
+            joinMode = .inviteOnly
+        } else if requiresApproval {
+            joinMode = .approval
+        } else {
+            joinMode = .open
+        }
+        
+        do {
+            try await groupService.createGroup(
+                name: groupName.trimmingCharacters(in: .whitespaces),
+                description: groupDescription.isEmpty ? nil : groupDescription,
+                groupType: isPrivate ? .friends : .community,
+                joinMode: joinMode
+            )
+            dismiss()
+        } catch {
+            createError = error
+        }
+    }
 }
 
 #Preview {
     GroupsView()
+        .withMockServices()
 }

@@ -33,17 +33,23 @@ enum PlankTimerState: Equatable {
 
 struct PlankTimerView: View {
     @State private var timerService = TimerService()
-    private var mockData: MockDataService { MockDataService.shared }
+    @Environment(\.plankService) private var plankService
+    @Environment(\.streakService) private var streakService
+    @Environment(\.badgeService) private var badgeService
+    @Environment(\.leaderboardService) private var leaderboardService
     
-    @State private var selectedPlankType: Constants.Plank.PlankType = .elbow
-    @State private var showingPlankTypeSelector = false
+    @State private var saveError: String?
     @State private var showingManualEntry = false
     @State private var buttonScale: CGFloat = 1.0
     
     // Enhanced timer state
+    // Note: double-tap protection during save is handled by the state machine —
+    // the .celebration case returns `break` in handleButtonTap(), so the button
+    // is a no-op while the save is in flight. No separate isSaving flag is needed.
     @State private var timerState: PlankTimerState = .ready
     @State private var countdownTimer: Timer?
     @State private var celebrationTimer: Timer?
+    @State private var saveTask: Task<Void, Never>?
     
     // Settings
     @AppStorage("soundEnabled") private var soundEnabled = true
@@ -170,23 +176,54 @@ struct PlankTimerView: View {
             }
         }
         .animation(.easeInOut(duration: 0.4), value: timerState)
-        .sheet(isPresented: $showingPlankTypeSelector) {
-            PlankTypeSelectorSheet(selectedType: $selectedPlankType)
-                .presentationDetents([.medium])
-        }
         .sheet(isPresented: $showingManualEntry) {
             ManualEntryView()
         }
         .toolbar(shouldHideNavigation ? .hidden : .visible, for: .tabBar)
         .animation(.easeInOut(duration: 0.3), value: shouldHideNavigation)
+        .alert("Plank not saved", isPresented: Binding(
+            get: { saveError != nil },
+            set: { if !$0 { saveError = nil } }
+        )) {
+            Button("OK", role: .cancel) { saveError = nil }
+        } message: {
+            Text(saveError ?? "Your plank couldn't be saved. Check your connection and try again.")
+        }
         .onAppear {
             checkForNewDayOrExistingPlanks()
+        }
+        .onDisappear {
+            cleanup()
         }
         .onChange(of: todayPlankCount) { oldValue, newValue in
             // If all planks were deleted (from Settings), transition back to ready state
             if newValue == 0 && timerState == .completedToday {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     timerState = .ready
+                }
+            }
+        }
+        .onChange(of: plankService.hasLoaded) { _, isLoaded in
+            // Once PlankService has completed its initial sync with the server,
+            // reconcile @AppStorage today-count against the authoritative server count.
+            // This handles cases like: planks logged on another device today, or a
+            // fresh install where @AppStorage defaults to 0 despite existing server data.
+            guard isLoaded else { return }
+            let serverCount = plankService.todayPlankCountFromServer
+            let today = todayDateString()
+            
+            // Only reconcile if we're looking at today's data (not a stale date)
+            if todayPlankDateString == today && serverCount != todayPlankCount {
+                todayPlankCount = serverCount
+                // Update timer state to match reconciled count
+                if serverCount > 0 && timerState == .ready {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        timerState = .completedToday
+                    }
+                } else if serverCount == 0 && timerState == .completedToday {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        timerState = .ready
+                    }
                 }
             }
         }
@@ -212,25 +249,9 @@ struct PlankTimerView: View {
     // MARK: - Top Bar
     
     private var topBar: some View {
-        // Top button row: Plank type (left) and Manual entry (right)
+        // Top button row: Manual entry (right only now that plank type is removed)
         HStack {
-            // Plank type selector (left)
-            Button {
-                showingPlankTypeSelector = true
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.caption2)
-                    Text(selectedPlankType.rawValue)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                }
-                .foregroundStyle(.white.opacity(0.8))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Color.white.opacity(0.15))
-                .clipShape(Capsule())
-            }
+            Spacer()
             
             Spacer()
             
@@ -279,7 +300,7 @@ struct PlankTimerView: View {
         case .active:
             return nil  // No heading - timer is the focus
         case .celebration:
-            return "Well done!"
+            return "Well done"
         case .completedToday:
             return nil  // No heading - button content is sufficient
         }
@@ -291,7 +312,7 @@ struct PlankTimerView: View {
         case .ready:
             return nil  // No subtitle - streak message is in top bar
         case .countdown:
-            return "Tap to cancel"
+            return "Get into position"
         case .active:
             return "Tap to stop"
         case .celebration:
@@ -320,9 +341,13 @@ struct PlankTimerView: View {
                     AnimatedFlameIcon(isAnimating: timerState == .completedToday)
                         .font(.title2)
                     if timerState == .ready {
-                        Text("Protect your \(mockData.currentUser.currentStreak) day streak")
+                        if streakService.currentStreak > 0 {
+                            Text("Protect your \(streakService.currentStreak)-day streak")
+                        } else {
+                            Text("Start your streak today")
+                        }
                     } else {
-                        Text("\(mockData.currentUser.currentStreak) day streak")
+                        Text("\(streakService.currentStreak)-day streak")
                     }
                 }
                 .font(.title3)
@@ -408,13 +433,14 @@ struct PlankTimerView: View {
     private func buttonContent(for size: CGFloat) -> some View {
         switch timerState {
         case .ready:
-            // Show icon and "Tap to Plank" text
+            // Show logo and "Tap to plank" text
             VStack(spacing: 12) {
-                Image(systemName: "figure.core.training")
-                    .font(.system(size: 50, weight: .medium))
-                    .foregroundStyle(.white)
+                Image("AppLogoWhite")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 80, height: 80)
                 
-                Text("Tap to Plank")
+                Text("Tap to plank")
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.9))
             }
@@ -430,14 +456,16 @@ struct PlankTimerView: View {
                 }
             
         case .active:
-            // Show small icon above timer - scale font based on button size
+            // Show small logo above timer - scale based on button size
             let timerFontSize: CGFloat = size * 0.16 // ~56pt for 350pt button (20% smaller)
             let iconSize: CGFloat = size * 0.07      // ~24pt for 350pt button
             
             VStack(spacing: 12) {
-                Image(systemName: "figure.core.training")
-                    .font(.system(size: iconSize, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.8))
+                Image("AppLogoWhite")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: iconSize * 2, height: iconSize * 2)
+                    .opacity(0.8)
                 
                 Text(timerService.formattedTime)
                     .font(.system(size: timerFontSize, weight: .bold, design: .monospaced))
@@ -496,13 +524,7 @@ struct PlankTimerView: View {
         return String(format: "%02d:%02d", minutes, seconds)
     }
     
-    /// Format a plank duration
-    private func formatPlankTime(_ duration: Double) -> String {
-        let totalSeconds = Int(duration)
-        let minutes = totalSeconds / 60
-        let seconds = totalSeconds % 60
-        return String(format: "%02d:%02d", minutes, seconds)
-    }
+
     
     // MARK: - Previous Planks Stack
     
@@ -525,7 +547,7 @@ struct PlankTimerView: View {
                     let opacity = opacityForIndex(index, total: previousTimes.count)
                     let scale = scaleForIndex(index, total: previousTimes.count)
                     
-                    Text(formatPlankTime(duration))
+                    Text(duration.formattedPlankTime)
                         .font(.system(size: 16 * scale, weight: .medium, design: .monospaced))
                         .foregroundStyle(.white.opacity(opacity))
                 }
@@ -602,7 +624,9 @@ struct PlankTimerView: View {
         }
         
         // Schedule countdown timer
-        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [self] timer in
+        // Note: For SwiftUI structs, we capture self by value (copy) since structs are value types.
+        // Timer invalidation happens in onDisappear to prevent memory issues.
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
             Task { @MainActor in
                 guard case .countdown(let current) = timerState else {
                     timer.invalidate()
@@ -684,7 +708,7 @@ struct PlankTimerView: View {
         }
         
         // After celebration duration, transition to completedToday state
-        celebrationTimer = Timer.scheduledTimer(withTimeInterval: celebrationDuration, repeats: false) { [self] _ in
+        celebrationTimer = Timer.scheduledTimer(withTimeInterval: celebrationDuration, repeats: false) { _ in
             Task { @MainActor in
                 withAnimation(.easeInOut(duration: 0.3)) {
                     timerState = .completedToday
@@ -707,19 +731,68 @@ struct PlankTimerView: View {
             clearPlankTimes()
         }
         
-        // Add this plank to today's totals
+        // Add this plank to today's totals (optimistic update)
         todayPlankTotalTime += plankDuration
         todayPlankCount += 1
         
         // Track individual plank times
         addPlankTime(plankDuration)
         
-        // Save to mock data service
-        let session = PlankSession(
-            durationSeconds: plankDuration,
-            plankType: selectedPlankType
-        )
-        mockData.addPlankSession(session)
+        // Save to backend via PlankService - track task so we can cancel on cleanup
+        saveTask?.cancel()
+        saveTask = Task { @MainActor [plankService, streakService, badgeService, leaderboardService] in
+            do {
+                let response = try await plankService.createPlank(
+                    durationSeconds: plankDuration,
+                    inputMethod: .timer
+                )
+                
+                // Check for cancellation before continuing
+                try Task.checkCancellation()
+                
+                // Apply streak data returned inline — no extra network round-trip needed.
+                // The response already contains the recalculated current + longest streak.
+                if let streak = response.streak {
+                    streakService.applyInlineStreakUpdate(
+                        current: streak.current,
+                        longest: streak.longest
+                    )
+                }
+                
+                // If new badges were earned, fetch the full badge list.
+                // Called directly — @MainActor task ensures correct actor context.
+                if let badges = response.badges, !badges.newlyEarned.isEmpty {
+                    try? await badgeService.fetchAvailableBadges()
+                }
+                
+                // Mark leaderboard stale — user's rank may have changed after this plank
+                leaderboardService.markStale()
+                
+                // Schedule a background full streak refresh to pick up calendar
+                // activity, freeze tokens, and other fields not in the inline response.
+                Task {
+                    try? await streakService.fetchStreak()
+                }
+                
+                #if DEBUG
+                print("[PlankTimer] Plank saved: \(response.plank.id), badges earned: \(response.badges?.newlyEarned.count ?? 0)")
+                #endif
+            } catch is CancellationError {
+                // Task was cancelled - rollback optimistic update
+                rollbackPlank(duration: plankDuration)
+                #if DEBUG
+                print("[PlankTimer] Save task cancelled, rolled back local state")
+                #endif
+            } catch {
+                // API error - rollback optimistic update and show error.
+                // Direct access is safe — Task is @MainActor.
+                self.rollbackPlank(duration: plankDuration)
+                self.saveError = error.localizedDescription
+                #if DEBUG
+                print("[PlankTimer] Failed to save plank: \(error), rolled back local state")
+                #endif
+            }
+        }
         
         // Reset timer for next plank
         timerService.reset()
@@ -732,6 +805,31 @@ struct PlankTimerView: View {
         return formatter.string(from: Date())
     }
     
+    /// Rolls back an optimistic plank update when save fails
+    /// - Parameter duration: The duration of the plank to remove
+    private func rollbackPlank(duration: Double) {
+        // Remove from today's totals
+        todayPlankTotalTime = max(0, todayPlankTotalTime - duration)
+        todayPlankCount = max(0, todayPlankCount - 1)
+        
+        // Remove the last plank time from the array
+        var times = todayPlankTimes
+        if let lastIndex = times.lastIndex(where: { abs($0 - duration) < 0.1 }) {
+            times.remove(at: lastIndex)
+            if let data = try? JSONEncoder().encode(times),
+               let json = String(data: data, encoding: .utf8) {
+                todayPlankTimesJSON = json
+            }
+        }
+        
+        // If all planks rolled back, go back to ready state
+        if todayPlankCount == 0 {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                timerState = .ready
+            }
+        }
+    }
+    
     // MARK: - Cleanup
     
     private func cleanup() {
@@ -739,16 +837,9 @@ struct PlankTimerView: View {
         countdownTimer = nil
         celebrationTimer?.invalidate()
         celebrationTimer = nil
-    }
-}
-
-// MARK: - Plank Button Style
-
-struct PlankButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
-            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+        saveTask?.cancel()
+        saveTask = nil
+        timerService.stop()
     }
 }
 
@@ -821,4 +912,5 @@ struct AnimatedFlameIcon: View {
 
 #Preview {
     PlankTimerView()
+        .withMockServices()
 }

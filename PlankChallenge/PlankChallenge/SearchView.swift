@@ -8,39 +8,31 @@
 import SwiftUI
 
 struct SearchView: View {
-    @Binding var isPresented: Bool
-    @State private var searchText = ""
-    @FocusState private var isSearchFocused: Bool
+    @Environment(\.userService) private var userService
+    @Environment(\.groupService) private var groupService
     
-    private var mockData: MockDataService { MockDataService.shared }
+    @State private var searchText = ""
+    @State private var searchTask: Task<Void, Never>?
+    @State private var showingError = false
+    @State private var errorMessage: String?
+    @FocusState private var isSearchFocused: Bool
+    @State private var hasLoadedSuggestions = false
     
     var body: some View {
+        NavigationStack {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                Text("Search")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-            .padding(.bottom, 8)
-            
             // Content
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    // Search Results (when searching)
                     if !searchText.isEmpty {
                         searchResults
                     } else {
-                        // Discover Section
                         discoverSection
                     }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
-                .padding(.bottom, 100) // Space for bottom bar
+                .padding(.bottom, 100)
             }
             
             Spacer()
@@ -49,47 +41,89 @@ struct SearchView: View {
             bottomSearchBar
         }
         .background(Color.softBlueBackground)
+        .navigationTitle("Find People")
+        .navigationBarTitleDisplayMode(.large)
         .onAppear {
             isSearchFocused = true
         }
+        .task {
+            guard !hasLoadedSuggestions else { return }
+            hasLoadedSuggestions = true
+            try? await userService.fetchSuggestedUsers()
+        }
+        .onChange(of: searchText) { _, newValue in
+            performSearch()
+        }
+        .onDisappear {
+            searchTask?.cancel()
+            userService.clearSearchResults()
+        }
+        .alert("Search failed", isPresented: $showingError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "Couldn't run that search. Try again.")
+        }
+        } // NavigationStack
     }
     
     // MARK: - Discover Section
     
     private var discoverSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Discover")
-                .font(.headline)
-                .foregroundStyle(.primary)
+        VStack(alignment: .leading, spacing: 20) {
+            // Suggested People
+            suggestedPeopleSection
+        }
+    }
+    
+    @ViewBuilder
+    private var suggestedPeopleSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            AppSectionHeader<EmptyView>(title: "SUGGESTED PEOPLE")
             
-            // Popular Groups Card
-            DiscoverCard(
-                title: "Popular Groups",
-                subtitle: "Join trending fitness communities",
-                icon: "trophy.fill",
-                gradientColors: [.discoverBlueStart, .discoverBlueEnd]
-            ) {
-                // Action: Show popular groups
-            }
-            
-            // Find People Card
-            DiscoverCard(
-                title: "Find People",
-                subtitle: "Search for friends to follow",
-                icon: "person.2.fill",
-                gradientColors: [.discoverPurpleStart, .discoverPurpleEnd]
-            ) {
-                // Action: Show people search
-            }
-            
-            // Public Groups Card
-            DiscoverCard(
-                title: "Public Groups",
-                subtitle: "Open groups you can join instantly",
-                icon: "globe",
-                gradientColors: [.discoverOrangeStart, .discoverOrangeEnd]
-            ) {
-                // Action: Show public groups
+            if userService.isLoading && userService.suggestedUsers.isEmpty {
+                // Loading shimmer
+                ForEach(0..<3, id: \.self) { _ in
+                    HStack(spacing: 12) {
+                        Circle()
+                            .fill(Color.secondary.opacity(0.15))
+                            .frame(width: 48, height: 48)
+                        VStack(alignment: .leading, spacing: 6) {
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.secondary.opacity(0.15))
+                                .frame(width: 120, height: 14)
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.secondary.opacity(0.1))
+                                .frame(width: 80, height: 11)
+                        }
+                        Spacer()
+                    }
+                    .padding(.vertical, 6)
+                }
+            } else if userService.suggestedUsers.isEmpty {
+                // Empty state — prompt user to search
+                VStack(spacing: 8) {
+                    Image(systemName: "person.2")
+                        .font(.largeTitle)
+                        .foregroundStyle(.secondary)
+                    Text("No suggestions yet")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Text("Search above to find people to follow")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 24)
+            } else {
+                ForEach(userService.suggestedUsers) { suggestion in
+                    NavigationLink {
+                        UserProfileView(userId: suggestion.user.id)
+                    } label: {
+                        SuggestedUserRow(suggestion: suggestion)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
     }
@@ -98,54 +132,79 @@ struct SearchView: View {
     
     private var searchResults: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // People Results
-            if !filteredUsers.isEmpty {
-                Text("People")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
+            // Loading indicator
+            if userService.isSearching {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                    Spacer()
+                }
+                .padding(.top, 20)
+            }
+            
+            // People Results from API
+            if !userService.searchResults.isEmpty {
+                AppSectionHeader<EmptyView>(title: "PEOPLE")
                 
-                ForEach(filteredUsers) { user in
-                    SearchResultRow(
-                        title: user.displayName,
-                        subtitle: "\(user.currentStreak) day streak",
-                        icon: "person.circle.fill"
-                    )
+                ForEach(userService.searchResults) { user in
+                    NavigationLink {
+                        UserProfileView(userId: user.id)
+                    } label: {
+                        SearchResultRow(
+                            title: user.displayName,
+                            subtitle: "\(user.currentStreak) day streak",
+                            icon: "person.circle.fill"
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             
-            // Groups Results
+            // Groups Results from GroupService
             if !filteredGroups.isEmpty {
-                Text("Groups")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
+                AppSectionHeader<EmptyView>(title: "GROUPS")
                     .padding(.top, 8)
                 
                 ForEach(filteredGroups) { group in
-                    SearchResultRow(
-                        title: group.name,
-                        subtitle: "\(group.memberCount) members",
-                        icon: "person.3.fill"
-                    )
+                    NavigationLink {
+                        GroupDetailView(groupId: group.id)
+                    } label: {
+                        SearchResultRow(
+                            title: group.name,
+                            subtitle: "\(group.memberCount) members",
+                            icon: "person.3.fill"
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             
             // No Results
-            if filteredUsers.isEmpty && filteredGroups.isEmpty {
+            if !userService.isSearching && userService.searchResults.isEmpty && filteredGroups.isEmpty && searchText.count >= 2 {
                 VStack(spacing: 12) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 40))
                         .foregroundStyle(.secondary)
                     
-                    Text("No results found")
+                    Text("No results for \"\(searchText)\"")
                         .font(.headline)
                         .foregroundStyle(.secondary)
                     
-                    Text("Try searching for people or groups")
+                    Text("Try a different name or check your spelling")
                         .font(.subheadline)
                         .foregroundStyle(.tertiary)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.top, 40)
+            }
+            
+            // Minimum characters hint
+            if searchText.count > 0 && searchText.count < 2 {
+                Text("Type at least 2 characters to search")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 20)
             }
         }
     }
@@ -154,27 +213,13 @@ struct SearchView: View {
     
     private var bottomSearchBar: some View {
         HStack(spacing: 12) {
-            // Back Button
-            Button {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                    isPresented = false
-                }
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .frame(width: 44, height: 44)
-                    .background(Color.warmWhiteCard)
-                    .clipShape(Circle())
-            }
-            
             // Search Field
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 16))
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                 
-                TextField("People, Groups...", text: $searchText)
+                TextField("People, groups...", text: $searchText)
                     .font(.body)
                     .focused($isSearchFocused)
                 
@@ -183,7 +228,7 @@ struct SearchView: View {
                         searchText = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 16))
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -203,62 +248,108 @@ struct SearchView: View {
     
     // MARK: - Filtered Data
     
-    private var filteredUsers: [LeaderboardUser] {
+    private var filteredGroups: [APIGroup] {
         guard !searchText.isEmpty else { return [] }
-        return mockData.leaderboardUsers.filter {
-            $0.displayName.localizedCaseInsensitiveContains(searchText)
-        }
-    }
-    
-    private var filteredGroups: [MockGroup] {
-        guard !searchText.isEmpty else { return [] }
-        let allGroups = mockData.myGroups + mockData.discoverGroups
+        // Search through both user's groups and discoverable groups
+        let allGroups = groupService.myGroups + groupService.discoverGroups
         return allGroups.filter {
             $0.name.localizedCaseInsensitiveContains(searchText)
         }
     }
+    
+    // MARK: - Search Logic
+    
+    private func performSearch() {
+        // Cancel previous search task
+        searchTask?.cancel()
+        
+        // Clear results if search text is too short
+        guard searchText.count >= 2 else {
+            userService.clearSearchResults()
+            return
+        }
+        
+        // Debounce search with 300ms delay
+        searchTask = Task {
+            do {
+                try await Task.sleep(nanoseconds: 300_000_000) // 300ms
+            } catch {
+                // Task was cancelled during sleep - this is expected behavior
+                return
+            }
+            
+            // Double-check cancellation after sleep
+            guard !Task.isCancelled else { return }
+            
+            // Capture current search text to verify it hasn't changed
+            let currentQuery = searchText
+            
+            do {
+                try await userService.searchUsers(query: currentQuery)
+                
+                // Final cancellation check - don't update state if cancelled
+                guard !Task.isCancelled else { return }
+            } catch is CancellationError {
+                // Task was cancelled - this is expected during rapid typing
+                return
+            } catch {
+                // Final cancellation check before showing error
+                guard !Task.isCancelled else { return }
+                
+                // Only show error alert for actual errors, not cancellations
+                errorMessage = error.localizedDescription
+                showingError = true
+            }
+        }
+    }
 }
 
-// MARK: - Discover Card
+// MARK: - Suggested User Row
 
-struct DiscoverCard: View {
-    let title: String
-    let subtitle: String
-    let icon: String
-    let gradientColors: [Color]
-    let action: () -> Void
+struct SuggestedUserRow: View {
+    let suggestion: UserService.SuggestedUser
     
     var body: some View {
-        Button(action: action) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                    
-                    Text(subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.8))
-                }
-                
-                Spacer()
-                
-                Image(systemName: icon)
-                    .font(.system(size: 28))
-                    .foregroundStyle(.white.opacity(0.6))
-            }
-            .padding(20)
-            .background(
-                LinearGradient(
-                    colors: gradientColors,
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+        HStack(spacing: 12) {
+            // Avatar
+            AvatarView.accent(
+                name: suggestion.user.displayName,
+                imageUrl: suggestion.user.profileImageUrl,
+                size: Constants.UI.avatarMedium
             )
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            
+            // Name + reason
+            VStack(alignment: .leading, spacing: 3) {
+                Text(suggestion.user.displayName)
+                    .font(.body)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+                
+                Text(suggestion.suggestionReason)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            
+            Spacer()
+            
+            // Streak badge
+            if suggestion.user.currentStreak > 0 {
+                HStack(spacing: 3) {
+                    Image(systemName: "flame.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                    Text("\(suggestion.user.currentStreak)")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 6)
     }
 }
 
@@ -299,5 +390,6 @@ struct SearchResultRow: View {
 }
 
 #Preview {
-    SearchView(isPresented: .constant(true))
+    SearchView()
+        .withMockServices()
 }

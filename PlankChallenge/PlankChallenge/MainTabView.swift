@@ -14,7 +14,7 @@ struct MainTabView: View {
         TabView(selection: $selectedTab) {
             PlankTimerView()
                 .tabItem {
-                    Label("Plank", systemImage: "figure.core.training")
+                    Label("Plank", image: "AppLogoTabBar")
                 }
                 .tag(0)
             
@@ -36,14 +36,7 @@ struct MainTabView: View {
                 }
                 .tag(3)
             
-            // Design System tab - only visible in DEBUG builds
-            #if DEBUG
-            DesignSystemCatalog()
-                .tabItem {
-                    Label("Design", systemImage: "paintbrush")
-                }
-                .tag(4)
-            #endif
+
         }
         .tint(Color.appAccent)
     }

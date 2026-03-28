@@ -8,52 +8,114 @@
 import SwiftUI
 
 struct GroupMembersListView: View {
-    let group: MockGroup
+    let groupId: String
+    
+    @Environment(\.groupService) private var groupService
     @State private var searchText = ""
+    @State private var lastLoadedGroupId: String?
     
     var body: some View {
-        List {
-            ForEach(filteredMembers) { member in
-                NavigationLink {
-                    UserProfileView(user: member)
-                } label: {
-                    MemberRow(member: member, isAdmin: group.members.first?.id == member.id)
-                }
+        Group {
+            if groupService.isLoading && groupService.currentGroupMembers.isEmpty {
+                loadingView
+            } else if groupService.currentGroupMembers.isEmpty {
+                emptyState
+            } else {
+                membersList
             }
         }
         .navigationTitle("Members")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Search members")
+        .refreshable {
+            await loadMembers()
+        }
+        .task(id: groupId) {
+            // Only load if groupId changed or we haven't loaded for this group
+            guard lastLoadedGroupId != groupId else { return }
+            await loadMembers()
+            lastLoadedGroupId = groupId
+        }
     }
     
-    private var filteredMembers: [MockUser] {
-        if searchText.isEmpty {
-            return group.members
+    // MARK: - Subviews
+    
+    private var loadingView: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+            Text("Loading members...")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
-        return group.members.filter {
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "person.2.slash")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            
+            Text("No members found")
+                .font(.headline)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    private var membersList: some View {
+        List {
+            ForEach(filteredMembers) { member in
+                NavigationLink {
+                    UserProfileView(userId: member.id)
+                } label: {
+                    MemberRow(member: member)
+                }
+            }
+        }
+    }
+    
+    private var filteredMembers: [APIGroupMember] {
+        if searchText.isEmpty {
+            return groupService.currentGroupMembers
+        }
+        return groupService.currentGroupMembers.filter {
             $0.displayName.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+    
+    // MARK: - Actions
+    
+    private func loadMembers() async {
+        do {
+            try await groupService.fetchGroupMembers(groupId: groupId)
+        } catch {
+            // Error stored in service
         }
     }
 }
 
+// MARK: - Member Row
+
 struct MemberRow: View {
-    let member: MockUser
-    let isAdmin: Bool
+    let member: APIGroupMember
     
     var body: some View {
         UserRowWithAdminBadge(
             name: member.displayName,
-            subtitle: "\(member.currentStreak) day streak",
+            subtitle: member.displayRole ?? "Member",
             avatarText: String(member.displayName.prefix(1)),
-            avatarImageName: member.profileImageName,
-            isAdmin: isAdmin,
+            avatarImageName: nil,
+            isAdmin: member.isAdmin,
             showChevron: false
         )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(member.displayName), \(member.displayRole ?? "Member")")
     }
 }
 
 #Preview {
     NavigationStack {
-        GroupMembersListView(group: MockDataService.shared.groups[0])
+        GroupMembersListView(groupId: "preview-group")
+            .withMockServices()
     }
 }

@@ -162,25 +162,11 @@ struct RankBadge: View {
     
     private var rankColor: Color {
         switch rank {
-        case 1: return .yellow
-        case 2: return Color(red: 192/255, green: 192/255, blue: 192/255) // Silver
-        case 3: return Color(red: 205/255, green: 127/255, blue: 50/255)  // Bronze
+        case 1: return Color.rankGold
+        case 2: return Color.rankSilver
+        case 3: return Color.rankBronze
         default: return .gray.opacity(0.2)
         }
-    }
-}
-
-// MARK: - Convenience Initializer for LeaderboardUser
-
-extension LeaderboardRowView {
-    init(user: LeaderboardUser, displayValue: String, size: LeaderboardRowSize = .regular) {
-        self.rank = user.rank
-        self.name = user.displayName
-        self.avatarText = String(user.displayName.prefix(1))
-        self.displayValue = displayValue
-        self.isCurrentUser = user.isCurrentUser
-        self.avatarImageName = nil // LeaderboardUser doesn't have profile images
-        self.size = size
     }
 }
 

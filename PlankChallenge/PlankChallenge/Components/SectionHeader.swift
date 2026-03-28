@@ -1,5 +1,5 @@
 //
-//  SectionHeader.swift
+//  AppSectionHeader.swift
 //  PlankChallenge
 //
 //  Created by Leo Bacevicius on 14/03/2026.
@@ -8,17 +8,46 @@
 import SwiftUI
 
 /// A unified section header component used throughout the app.
-/// Uses Title case styling (e.g., "Badges", "Recent Planks")
-struct SectionHeader<Destination: View>: View {
+///
+/// Uses ALL-CAPS caption style matching iOS native section headers (e.g. "YOUR STATS", "MY GROUPS").
+/// Pass the title in uppercase — the component does not auto-uppercase.
+///
+/// Usage examples:
+/// ```swift
+/// // Title only
+/// AppSectionHeader(title: "YOUR STATS")
+///
+/// // With NavigationLink "See All"
+/// AppSectionHeader(title: "EARNED BADGES") { BadgesView() }
+///
+/// // With action closure "See All"
+/// AppSectionHeader(title: "MY GROUPS", actionLabel: "See All") { showAll() }
+/// ```
+struct AppSectionHeader<Destination: View>: View {
     let title: String
     var actionLabel: String = "See All"
     var destination: (() -> Destination)? = nil
     var action: (() -> Void)? = nil
     
+    // Explicit memberwise init to prevent auto-synthesis conflicting with SwiftUI's Section.
+    init(
+        title: String,
+        actionLabel: String = "See All",
+        destination: (() -> Destination)? = nil,
+        action: (() -> Void)? = nil
+    ) {
+        self.title = title
+        self.actionLabel = actionLabel
+        self.destination = destination
+        self.action = action
+    }
+    
     var body: some View {
         HStack {
             Text(title)
-                .font(.headline)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
             
             Spacer()
             
@@ -43,20 +72,9 @@ struct SectionHeader<Destination: View>: View {
     }
 }
 
-/// A simpler section header without navigation/action
-struct SimpleSectionHeader: View {
-    let title: String
-    
-    var body: some View {
-        Text(title)
-            .font(.headline)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
 // MARK: - Convenience Initializers
 
-extension SectionHeader where Destination == EmptyView {
+extension AppSectionHeader where Destination == EmptyView {
     /// Creates a section header with just a title (no action)
     init(title: String) {
         self.title = title
@@ -65,12 +83,13 @@ extension SectionHeader where Destination == EmptyView {
         self.action = nil
     }
     
-    /// Creates a section header with a title and action closure
-    init(title: String, actionLabel: String = "See All", action: @escaping () -> Void) {
+    /// Creates a section header with a title and action closure.
+    /// Use `onAction:` label to disambiguate from SwiftUI's `Section` init.
+    init(title: String, actionLabel: String = "See All", onAction: @escaping () -> Void) {
         self.title = title
         self.actionLabel = actionLabel
         self.destination = nil
-        self.action = action
+        self.action = onAction
     }
 }
 
@@ -79,34 +98,26 @@ extension SectionHeader where Destination == EmptyView {
 #Preview("With Navigation") {
     NavigationStack {
         VStack(spacing: 20) {
-            SectionHeader(title: "Badges", actionLabel: "See All") {
-                Text("All Badges")
+            AppSectionHeader(title: "EARNED BADGES") {
+                Text("All Badges").navigationTitle("Badges")
             }
             .padding(.horizontal)
             
-            SectionHeader(title: "Recent Planks", actionLabel: "View History") {
-                Text("History")
+            AppSectionHeader(title: "RECENT PLANKS", actionLabel: "View History") {
+                Text("History").navigationTitle("History")
             }
             .padding(.horizontal)
         }
     }
 }
 
-#Preview("With Action") {
-    VStack(spacing: 20) {
-        SectionHeader(title: "My Groups", actionLabel: "See All") {
-            print("Tapped See All")
-        }
-        .padding(.horizontal)
-    }
-}
 
-#Preview("Simple") {
+#Preview("Title Only") {
     VStack(spacing: 20) {
-        SimpleSectionHeader(title: "Your Stats")
+        AppSectionHeader<EmptyView>(title: "YOUR STATS")
             .padding(.horizontal)
         
-        SectionHeader<EmptyView>(title: "Members")
+        AppSectionHeader<EmptyView>(title: "MEMBERS")
             .padding(.horizontal)
     }
 }

@@ -8,10 +8,59 @@
 import SwiftUI
 
 struct ProfileView: View {
-    private var mockData: MockDataService { MockDataService.shared }
+    @Environment(\.authService) private var authService
+    @Environment(\.plankService) private var plankService
+    @Environment(\.streakService) private var streakService
+    @Environment(\.badgeService) private var badgeService
+    @Environment(\.userService) private var userService
+    @Environment(\.mediaService) private var mediaService
+    
     @State private var showingEditProfile = false
-    @State private var showingQRCodeAlert = false
-    @State private var showingSearch = false
+    @State private var showingPhotoEditor = false
+    @State private var profileLoadError: String?
+    @State private var showingProfileLoadError = false
+    
+    // Computed properties for API data
+    private var displayName: String {
+        userService.currentUserProfile?.displayName
+            ?? authService.currentUser?.displayName
+            ?? "Loading..."
+    }
+    
+    private var userInitial: String {
+        String(displayName.prefix(1))
+    }
+    
+    private var currentStreak: Int {
+        streakService.currentStreak
+    }
+    
+    private var freezeTokens: Int {
+        streakService.freezeTokens
+    }
+    
+    private var totalPlanks: Int {
+        plankService.totalPlanks
+    }
+    
+    private var bestPlankTime: String {
+        plankService.longestPlank?.durationSeconds.formattedDuration ?? "0:00"
+    }
+    
+    /// Current user ID for navigation (nil if not available yet)
+    private var currentUserId: String? {
+        userService.currentUserProfile?.id ?? authService.currentUser?.id
+    }
+    
+    /// Following count from API
+    private var followingCount: Int {
+        userService.currentUserProfile?.followingCount ?? 0
+    }
+    
+    /// Follower count from API
+    private var followerCount: Int {
+        userService.currentUserProfile?.followerCount ?? 0
+    }
     
     var body: some View {
         NavigationStack {
@@ -31,14 +80,15 @@ struct ProfileView: View {
                             .padding(.horizontal, 16)
                             .padding(.top, 16)
                         
-                        // Media Gallery
-                        mediaGallery
-                            .padding(.top, 20)
+                        // Following / Followers tiles
+                        socialSection
+                            .padding(.horizontal, 16)
+                            .padding(.top, 16)
                         
                         // Stats Section
                         statsSection
                             .padding(.horizontal, 16)
-                            .padding(.top, 20)
+                            .padding(.top, 16)
                         
                         // Streak & Tokens
                         streakTokensSection
@@ -54,50 +104,91 @@ struct ProfileView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Color.subtleBlueGradientStart.opacity(0.5), for: .navigationBar)
+            .appNavigationBarStyle()
+            .navigationTitle("Profile")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Text("Profile")
-                        .font(.headline)
-                }
-                
                 ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 16) {
-                        Button {
-                            // Share functionality
-                        } label: {
-                            Image(systemName: "square.and.arrow.up")
-                                .foregroundStyle(.primary)
-                        }
-                        
-                        Button {
-                            showingSearch = true
-                        } label: {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundStyle(.primary)
-                        }
-                        
-                        NavigationLink {
-                            SettingsView()
-                        } label: {
-                            Image(systemName: "gearshape")
-                                .foregroundStyle(.primary)
-                        }
+                    NavigationLink {
+                        SettingsView()
+                    } label: {
+                        Image(systemName: "gearshape")
+                            .foregroundStyle(.primary)
                     }
                 }
             }
             .sheet(isPresented: $showingEditProfile) {
-                EditProfileView(user: mockData.currentUser)
+                if let apiUser = userService.currentUserProfile {
+                    EditProfileView(apiUser: apiUser)
+                } else if let authUser = authService.currentUser {
+                    EditProfileView(
+                        displayName: authUser.displayName ?? "",
+                        location: "",
+                        bio: ""
+                    )
+                }
             }
-            .sheet(isPresented: $showingSearch) {
-                SearchView(isPresented: $showingSearch)
+             .sheet(isPresented: $showingPhotoEditor) {
+                ProfilePhotoEditorView(
+                    currentImageUrl: userService.currentUserProfile?.profileImageUrl
+                )
             }
-            .alert("Coming Soon", isPresented: $showingQRCodeAlert) {
-                Button("OK", role: .cancel) { }
+            .task {
+                // Fetch user profile if not already loaded
+                if !userService.hasLoaded {
+                    do {
+                        try await userService.fetchProfile()
+                    } catch is CancellationError {
+                        // View disappeared before load completed — not a user error
+                    } catch {
+                        profileLoadError = error.localizedDescription
+                        showingProfileLoadError = true
+                    }
+                }
+            }
+            .alert("Couldn't load your profile", isPresented: $showingProfileLoadError) {
+                Button("Retry") {
+                    profileLoadError = nil
+                    Task {
+                        do {
+                            try await userService.fetchProfile()
+                        } catch is CancellationError {
+                            // Cancelled — not a user error
+                        } catch {
+                            profileLoadError = error.localizedDescription
+                            showingProfileLoadError = true
+                        }
+                    }
+                }
+                Button("OK", role: .cancel) { profileLoadError = nil }
             } message: {
-                Text("QR code sharing will be available in a future update.")
+                Text(profileLoadError ?? "Something went wrong. Try again.")
             }
         }
+    }
+    
+    // MARK: - Profile Avatar
+    
+    @ViewBuilder
+    private var profileAvatar: some View {
+        ZStack(alignment: .bottomTrailing) {
+            AvatarView.gradient(
+                name: displayName,
+                imageUrl: userService.currentUserProfile?.profileImageUrl,
+                size: Constants.UI.avatarLarge
+            )
+            
+            // Camera overlay badge
+            Circle()
+                .fill(Color.appAccent)
+                .frame(width: 22, height: 22)
+                .overlay {
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white)
+                }
+                .shadow(color: .black.opacity(0.15), radius: 2, x: 0, y: 1)
+        }
+        .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
     
     // MARK: - Profile Header (Strava-style)
@@ -106,24 +197,22 @@ struct ProfileView: View {
         VStack(alignment: .leading, spacing: 12) {
             // Avatar + Name row
             HStack(alignment: .top, spacing: 16) {
-                // Profile Avatar
-                Circle()
-                    .fill(LinearGradient.avatarGradient)
-                    .frame(width: 72, height: 72)
-                    .overlay {
-                        Text(String(mockData.currentUser.displayName.prefix(1)))
-                            .font(.system(size: 28, weight: .semibold))
-                            .foregroundStyle(.white)
-                    }
-                    .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+                // Profile Avatar (tappable to edit)
+                Button {
+                    showingPhotoEditor = true
+                } label: {
+                    profileAvatar
+                }
+                .buttonStyle(.plain)
                 
                 // Name and Location
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(mockData.currentUser.displayName)
+                    Text(displayName)
                         .font(.title2)
                         .fontWeight(.bold)
                     
-                    if let location = mockData.currentUser.location, !location.isEmpty {
+                    if let location = userService.currentUserProfile?.location,
+                       !location.isEmpty {
                         Text(location)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -133,45 +222,16 @@ struct ProfileView: View {
                 Spacer()
             }
             
-            // Bio
-            if !mockData.currentUser.bio.isEmpty {
-                Text(mockData.currentUser.bio)
+            // Bio from API
+            let bio = userService.currentUserProfile?.bio
+            if let bio = bio, !bio.isEmpty {
+                Text(bio)
                     .font(.subheadline)
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             
-            // Following / Followers
-            HStack(spacing: 24) {
-                NavigationLink {
-                    FollowListView(type: .following)
-                } label: {
-                    HStack(spacing: 4) {
-                        Text("Following")
-                            .foregroundStyle(.secondary)
-                        Text("\(mockData.following.count)")
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.primary)
-                    }
-                    .font(.subheadline)
-                }
-                .buttonStyle(.plain)
-                
-                NavigationLink {
-                    FollowListView(type: .followers)
-                } label: {
-                    HStack(spacing: 4) {
-                        Text("Followers")
-                            .foregroundStyle(.secondary)
-                        Text("\(mockData.followers.count)")
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.primary)
-                    }
-                    .font(.subheadline)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.top, 4)
+
         }
     }
     
@@ -187,249 +247,271 @@ struct ProfileView: View {
                     Image(systemName: "pencil")
                         .font(.caption)
                     Text("Edit Profile")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
                 }
-                .foregroundStyle(Color.appAccent)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(Color.appAccent, lineWidth: 1.5)
-                )
             }
-            
-            // Share QR Code button
-            Button {
-                showingQRCodeAlert = true
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "qrcode")
-                        .font(.caption)
-                    Text("Share QR Code")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                }
-                .foregroundStyle(Color.appAccent)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(Color.appAccent, lineWidth: 1.5)
-                )
-            }
+            .pillButtonStyle(isSelected: false)
             
             Spacer()
         }
     }
     
-    // MARK: - Media Gallery
+    // MARK: - Social Section (Following / Followers)
     
-    private var mediaGallery: some View {
-        MediaGalleryView(
-            images: MediaItem.mockItems,
-            personalBestTime: mockData.longestPlank?.durationSeconds.formattedDuration,
-            personalBestDate: mockData.longestPlank?.date,
-            onAllMediaTapped: {
-                // TODO: Navigate to all media view
+    private var socialSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            AppSectionHeader<EmptyView>(title: "YOUR COMMUNITY")
+            
+            HStack(spacing: 12) {
+                if let userId = currentUserId {
+                    NavigationLink {
+                        FollowListView(userId: userId, type: .following)
+                    } label: {
+                        StatCard(
+                            title: "Following",
+                            value: "\(followingCount)",
+                            icon: "person.2.fill",
+                            color: .appAccent,
+                            style: .grid
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Following \(followingCount) users. Tap to view.")
+                    
+                    NavigationLink {
+                        FollowListView(userId: userId, type: .followers)
+                    } label: {
+                        StatCard(
+                            title: "Followers",
+                            value: "\(followerCount)",
+                            icon: "person.fill.badge.plus",
+                            color: .tealAccent,
+                            style: .grid
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(followerCount) followers. Tap to view.")
+                } else {
+                    StatCard(
+                        title: "Following",
+                        value: "\(followingCount)",
+                        icon: "person.2.fill",
+                        color: .appAccent,
+                        style: .grid
+                    )
+                    StatCard(
+                        title: "Followers",
+                        value: "\(followerCount)",
+                        icon: "person.fill.badge.plus",
+                        color: .tealAccent,
+                        style: .grid
+                    )
+                }
             }
-        )
+        }
+        .appCardStyle()
     }
     
     // MARK: - Stats Section
     
     private var statsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("YOUR STATS")
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
+            AppSectionHeader<EmptyView>(title: "YOUR STATS")
             
             HStack(spacing: 12) {
                 // Streak
-                StatBox(
+                StatCard(
+                    title: "Day Streak",
+                    value: "\(currentStreak)",
                     icon: "flame.fill",
-                    iconColor: .orange,
-                    value: "\(mockData.currentUser.currentStreak)",
-                    label: "Day Streak"
+                    color: .orange,
+                    style: .grid
                 )
                 
                 // Total Planks
-                StatBox(
+                StatCard(
+                    title: "Total Planks",
+                    value: "\(totalPlanks)",
                     icon: "figure.core.training",
-                    iconColor: .blue,
-                    value: "\(mockData.totalPlanks)",
-                    label: "Total Planks"
+                    color: .appAccent,
+                    style: .grid
                 )
                 
                 // Best Plank
-                StatBox(
+                StatCard(
+                    title: "Best Plank",
+                    value: bestPlankTime,
                     icon: "trophy.fill",
-                    iconColor: .yellow,
-                    value: mockData.longestPlank?.durationSeconds.formattedDuration ?? "0:00",
-                    label: "Best Plank"
+                    color: .yellow,
+                    style: .grid
                 )
             }
         }
-        .padding(16)
-        .background(Color.warmWhiteCard)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+        .appCardStyle()
     }
     
     // MARK: - Streak & Tokens Section
     
     private var streakTokensSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("STREAK FREEZE TOKENS")
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
+            AppSectionHeader<EmptyView>(title: "STREAK SHIELDS")
             
             HStack {
                 // Token indicators
                 HStack(spacing: 8) {
                     ForEach(0..<Constants.Streak.maxFreezeTokens, id: \.self) { index in
                         Circle()
-                            .fill(index < mockData.currentUser.freezeTokens ? Color.cyan : Color.gray.opacity(0.3))
+                            .fill(index < freezeTokens ? Color.tealAccent : Color.gray.opacity(0.3))
                             .frame(width: 24, height: 24)
                             .overlay {
                                 Image(systemName: "snowflake")
                                     .font(.system(size: 12))
-                                    .foregroundStyle(index < mockData.currentUser.freezeTokens ? .white : .gray)
+                                    .foregroundStyle(index < freezeTokens ? .white : .gray)
                             }
                     }
                 }
                 
                 Spacer()
                 
-                Text("\(mockData.currentUser.freezeTokens)/\(Constants.Streak.maxFreezeTokens) remaining")
+                Text("\(freezeTokens) of \(Constants.Streak.maxFreezeTokens) shields left")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
             
-            Text("Tokens automatically protect your streak when you miss a day")
+            Text("A shield automatically activates when you miss a day — so your streak survives.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
-        .padding(16)
-        .background(Color.warmWhiteCard)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+        .appCardStyle()
     }
     
     // MARK: - Badges Section
     
     private var badgesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("EARNED BADGES")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                
-                Spacer()
-                
-                NavigationLink {
-                    BadgesView()
-                } label: {
-                    Text("See All")
-                        .font(.subheadline)
-                        .foregroundStyle(Color.appAccent)
-                }
+            AppSectionHeader(title: "EARNED BADGES") {
+                BadgesView()
             }
             
-            if mockData.badges.isEmpty {
-                Text("Complete streaks to earn badges!")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 8)
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 16) {
-                        ForEach(mockData.badges) { badge in
-                            if let badgeType = badge.badgeType {
-                                BadgeView(
-                                    badgeType: badgeType,
-                                    isEarned: true,
-                                    dateEarned: badge.dateEarned
-                                )
+            // Use API badges if loaded, otherwise fall back to mock data
+            if badgeService.hasLoaded {
+                if badgeService.earnedBadges.isEmpty {
+                    Text("Complete streaks and planks to earn your first badge")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 8)
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 16) {
+                            ForEach(badgeService.earnedBadges) { badge in
+                                ProfileAPIBadgeView(badge: badge)
                             }
                         }
                     }
                 }
+            } else {
+                // Loading state
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
             }
         }
-        .padding(16)
-        .background(Color.warmWhiteCard)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+        .appCardStyle()
     }
 }
 
-// MARK: - Stat Box Component
+// MARK: - Profile API Badge View
 
-struct StatBox: View {
-    let icon: String
-    let iconColor: Color
-    let value: String
-    let label: String
+struct ProfileAPIBadgeView: View {
+    let badge: APIBadge
     
     var body: some View {
         VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(iconColor)
+            // Badge icon circle — earned only, always full opacity
+            ZStack {
+                Circle()
+                    .fill(Color.appAccent.opacity(0.2))
+                    .frame(width: BadgeViewSize.small.circleSize,
+                           height: BadgeViewSize.small.circleSize)
+                
+                Text(badge.icon)
+                    .font(.system(size: BadgeViewSize.small.emojiSize))
+            }
             
-            Text(value)
-                .font(.title2)
-                .fontWeight(.bold)
-            
-            Text(label)
+            // Badge name
+            Text(badge.name)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .fontWeight(.medium)
+                .lineLimit(1)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(Color.softBlueBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .frame(width: BadgeViewSize.small.frameWidth)
     }
 }
 
 // MARK: - Edit Profile View
 
 struct EditProfileView: View {
-    let user: UserProfile
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.userService) private var userService
+    @Environment(\.authService) private var authService
+    @Environment(\.leaderboardService) private var leaderboardService
+    
+    // Initial values from current user
+    let initialDisplayName: String
+    let initialLocation: String
+    let initialBio: String
     
     @State private var displayName: String = ""
     @State private var location: String = ""
     @State private var bio: String = ""
-    @State private var selectedPlankType: Constants.Plank.PlankType = .elbow
+    @State private var isSaving = false
+    @State private var showingError = false
+    @State private var errorMessage = ""
+    
+    init(user: UserProfile) {
+        self.initialDisplayName = user.displayName
+        self.initialLocation = user.location ?? ""
+        self.initialBio = user.bio
+    }
+    
+    init(apiUser: APIUser) {
+        self.initialDisplayName = apiUser.displayName
+        self.initialLocation = apiUser.location ?? ""
+        self.initialBio = apiUser.bio ?? ""
+    }
+    
+    /// Fallback init when only minimal auth data is available (profile not yet loaded).
+    init(displayName: String, location: String, bio: String) {
+        self.initialDisplayName = displayName
+        self.initialLocation = location
+        self.initialBio = bio
+    }
+    
+    /// Whether any fields have been modified
+    private var hasChanges: Bool {
+        displayName != initialDisplayName ||
+        location != initialLocation ||
+        bio != initialBio
+    }
     
     var body: some View {
         NavigationStack {
             Form {
                 Section("Display Name") {
-                    TextField("Name", text: $displayName)
+                    TextField("Your name", text: $displayName)
+                        .disabled(isSaving)
                 }
                 
                 Section("Location") {
                     TextField("e.g. London, UK", text: $location)
+                        .disabled(isSaving)
                 }
                 
                 Section("Bio") {
-                    TextField("Tell us about yourself", text: $bio, axis: .vertical)
+                    TextField("A sentence or two about you", text: $bio, axis: .vertical)
                         .lineLimit(3...6)
+                        .disabled(isSaving)
                 }
                 
-                Section("Preferred Plank Type") {
-                    Picker("Plank Type", selection: $selectedPlankType) {
-                        ForEach(Constants.Plank.PlankType.allCases, id: \.self) { type in
-                            Text(type.rawValue).tag(type)
-                        }
-                    }
-                }
             }
             .navigationTitle("Edit Profile")
             .navigationBarTitleDisplayMode(.inline)
@@ -438,24 +520,70 @@ struct EditProfileView: View {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .disabled(isSaving)
                 }
                 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        // TODO: Save changes
-                        dismiss()
+                    if isSaving {
+                        ProgressView()
+                    } else {
+                        Button("Save") {
+                            Task {
+                                await saveProfile()
+                            }
+                        }
+                        .disabled(!hasChanges)
                     }
                 }
             }
-            .onAppear {
-                displayName = user.displayName
-                location = user.location ?? ""
-                bio = user.bio
+            .alert("Couldn't save your profile", isPresented: $showingError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage.isEmpty ? "Something went wrong. Try again." : errorMessage)
             }
+            .interactiveDismissDisabled(isSaving)
+            .onAppear {
+                displayName = initialDisplayName
+                location = initialLocation
+                bio = initialBio
+            }
+        }
+    }
+    
+    private func saveProfile() async {
+        isSaving = true
+        defer { isSaving = false }
+        
+        do {
+            // Only send changed fields
+            let newDisplayName = displayName != initialDisplayName ? displayName : nil
+            let newLocation = location != initialLocation ? (location.isEmpty ? nil : location) : nil
+            let newBio = bio != initialBio ? (bio.isEmpty ? nil : bio) : nil
+            
+            try await userService.updateProfile(
+                displayName: newDisplayName,
+                location: newLocation,
+                bio: newBio,
+                preferredPlankType: nil
+            )
+            
+            // Display name may have changed — mark leaderboard stale so the
+            // user's entry shows the updated name on next leaderboard view
+            leaderboardService.markStale()
+            
+            dismiss()
+            
+        } catch let error as UserServiceError {
+            errorMessage = error.localizedDescription
+            showingError = true
+        } catch {
+            errorMessage = "Failed to save profile: \(error.localizedDescription)"
+            showingError = true
         }
     }
 }
 
 #Preview {
     ProfileView()
+        .withMockServices()
 }

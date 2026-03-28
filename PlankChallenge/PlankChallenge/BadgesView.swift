@@ -8,14 +8,23 @@
 import SwiftUI
 
 struct BadgesView: View {
-    private var mockData: MockDataService { MockDataService.shared }
+    @Environment(\.badgeService) private var badgeService
+    
+    @State private var showingError = false
+    @State private var errorMessage: String?
     
     private let columns = [
         GridItem(.adaptive(minimum: 100), spacing: 16)
     ]
     
-    private var earnedBadgeTypes: [Badge.BadgeType] {
-        mockData.badges.compactMap { $0.badgeType }
+    // Earned badges from API
+    private var earnedAPIBadges: [APIBadgeWithProgress] {
+        badgeService.availableBadges.filter { $0.earned }
+    }
+    
+    // Locked badges from API
+    private var lockedAPIBadges: [APIBadgeWithProgress] {
+        badgeService.availableBadges.filter { !$0.earned }
     }
     
     var body: some View {
@@ -24,53 +33,88 @@ struct BadgesView: View {
             
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    // Earned badges
-                    if !mockData.badges.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            SectionHeader(title: "Earned")
-                                .padding(.horizontal)
-                            
-                            LazyVGrid(columns: columns, spacing: 20) {
-                                ForEach(earnedBadgeTypes, id: \.self) { badgeType in
-                                    let earnedBadge = mockData.badges.first { $0.badgeType == badgeType }
-                                    BadgeView(
-                                        badgeType: badgeType,
-                                        isEarned: true,
-                                        dateEarned: earnedBadge?.dateEarned
-                                    )
+                    // Use API data if loaded
+                    if badgeService.hasLoaded {
+                        // Earned badges from API
+                        if !earnedAPIBadges.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                AppSectionHeader<EmptyView>(title: "EARNED (\(earnedAPIBadges.count))")
+                                    .padding(.horizontal)
+                                
+                                LazyVGrid(columns: columns, spacing: 20) {
+                                    ForEach(earnedAPIBadges) { badge in
+                                        APIBadgeDisplayView(badge: badge, size: .large)
+                                    }
                                 }
+                                .padding(.horizontal)
                             }
-                            .padding(.horizontal)
                         }
-                    }
-                    
-                    // Locked badges
-                    VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader(title: "Locked")
-                            .padding(.horizontal)
                         
-                        LazyVGrid(columns: columns, spacing: 20) {
-                            ForEach(Badge.BadgeType.allCases.filter { !earnedBadgeTypes.contains($0) }, id: \.self) { badgeType in
-                                BadgeView(
-                                    badgeType: badgeType,
-                                    isEarned: false,
-                                    dateEarned: nil
-                                )
+                        // Locked badges from API
+                        if !lockedAPIBadges.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                AppSectionHeader<EmptyView>(title: "LOCKED (\(lockedAPIBadges.count))")
+                                    .padding(.horizontal)
+                                
+                                LazyVGrid(columns: columns, spacing: 20) {
+                                    ForEach(lockedAPIBadges) { badge in
+                                        APIBadgeDisplayView(badge: badge, size: .large)
+                                    }
+                                }
+                                .padding(.horizontal)
                             }
                         }
-                        .padding(.horizontal)
+                    } else {
+                        // Loading state
+                        ProgressView("Loading badges...")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 40)
+                            .accessibilityLabel("Loading badges")
                     }
                 }
                 .padding(.vertical)
             }
         }
         .navigationTitle("Badges")
-        .toolbarBackground(Color.subtleBlueGradientStart.opacity(0.5), for: .navigationBar)
+        .appNavigationBarStyle()
+        .task {
+            if !badgeService.hasLoaded {
+                do {
+                    try await badgeService.fetchAvailableBadges()
+                } catch is CancellationError {
+                    // View disappeared before load completed — not a user error
+                } catch {
+                    errorMessage = error.localizedDescription
+                    showingError = true
+                }
+            }
+        }
+        .alert("Couldn't load badges", isPresented: $showingError) {
+            Button("Retry") {
+                errorMessage = nil
+                Task {
+                    do {
+                        try await badgeService.fetchAvailableBadges()
+                    } catch is CancellationError {
+                        // Cancelled — not a user error
+                    } catch {
+                        errorMessage = error.localizedDescription
+                        showingError = true
+                    }
+                }
+            }
+            Button("OK", role: .cancel) { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "Something went wrong. Try again.")
+        }
     }
 }
+
+
 
 #Preview {
     NavigationStack {
         BadgesView()
+            .withMockServices()
     }
 }

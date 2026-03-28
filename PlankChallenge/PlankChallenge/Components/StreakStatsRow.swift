@@ -88,7 +88,7 @@ struct StreakStatsRow: View {
             
             // Personal Best / New Record Message
             if isNewRecord {
-                Text("🎉 New best!")
+                Text("New best!")
                     .font(.caption2)
                     .foregroundStyle(.orange)
             } else {
@@ -105,57 +105,24 @@ struct StreakStatsRow: View {
     private var statsSection: some View {
         VStack(spacing: 8) {
             // Best Plank
-            MiniStatCard(
-                icon: "star.fill",
-                iconColor: .purple,
+            StatCard(
                 title: "Best Plank",
-                value: bestPlankTime
+                value: bestPlankTime,
+                icon: "star.fill",
+                color: .purple,
+                style: .mini
             )
             
             // Total Planks
-            MiniStatCard(
-                icon: "checkmark.circle.fill",
-                iconColor: .green,
+            StatCard(
                 title: "Total Planks",
-                value: "\(totalPlanks)"
+                value: "\(totalPlanks)",
+                icon: "checkmark.circle.fill",
+                color: .green,
+                style: .mini
             )
         }
         .frame(maxWidth: .infinity)
-    }
-}
-
-// MARK: - Mini Stat Card
-
-struct MiniStatCard: View {
-    let icon: String
-    let iconColor: Color
-    let title: String
-    let value: String
-    
-    var body: some View {
-        HStack(spacing: 10) {
-            // Icon
-            Image(systemName: icon)
-                .font(.system(size: 18))
-                .foregroundStyle(iconColor)
-                .frame(width: 24)
-            
-            // Text
-            VStack(alignment: .leading, spacing: 2) {
-                Text(value)
-                    .font(.headline)
-                    .fontWeight(.bold)
-                
-                Text(title)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            
-            Spacer()
-        }
-        .padding(12)
-        .background(Color.softBlueBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
 

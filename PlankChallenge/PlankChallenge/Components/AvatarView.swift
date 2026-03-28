@@ -8,10 +8,15 @@
 import SwiftUI
 
 /// A unified avatar component used throughout the app.
-/// Displays the first letter of a name in a circular container, or an image if provided.
+/// Displays the first letter of a name in a circular container.
+/// Supports three image sources (in priority order):
+///   1. `imageUrl`  — remote URL loaded via AsyncImage (profile photos)
+///   2. `imageName` — local asset catalog name
+///   3. Initials fallback — first letter of `text`
 struct AvatarView: View {
     let text: String
     let imageName: String?
+    let imageUrl: String?
     let size: CGFloat
     var style: AvatarStyle = .standard
     
@@ -44,33 +49,62 @@ struct AvatarView: View {
         }
     }
     
-    init(text: String, imageName: String? = nil, size: CGFloat, style: AvatarStyle = .standard) {
+    init(
+        text: String,
+        imageName: String? = nil,
+        imageUrl: String? = nil,
+        size: CGFloat,
+        style: AvatarStyle = .standard
+    ) {
         self.text = text
         self.imageName = imageName
+        self.imageUrl = imageUrl
         self.size = size
         self.style = style
     }
     
     var body: some View {
-        if let imageName = imageName, !imageName.isEmpty {
-            // Show image if available
-            Image(imageName)
-                .resizable()
-                .scaledToFill()
+        Group {
+            if let urlString = imageUrl, let url = URL(string: urlString) {
+                // Remote image via AsyncImage
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure, .empty:
+                        initialsView
+                    @unknown default:
+                        initialsView
+                    }
+                }
                 .frame(width: size, height: size)
                 .clipShape(Circle())
-        } else {
-            // Show initial letter
-            Circle()
-                .fill(style.background)
-                .frame(width: size, height: size)
-                .overlay {
-                    Text(String(text.prefix(1)).uppercased())
-                        .font(fontForSize)
-                        .fontWeight(size <= 36 ? .medium : .semibold)
-                        .foregroundStyle(style.textColor)
-                }
+            } else if let imageName = imageName, !imageName.isEmpty {
+                // Local asset
+                Image(imageName)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipShape(Circle())
+            } else {
+                // Initials fallback
+                initialsView
+            }
         }
+    }
+    
+    private var initialsView: some View {
+        Circle()
+            .fill(style.background)
+            .frame(width: size, height: size)
+            .overlay {
+                Text(String(text.prefix(1)).uppercased())
+                    .font(fontForSize)
+                    .fontWeight(size <= 36 ? .medium : .semibold)
+                    .foregroundStyle(style.textColor)
+            }
     }
     
     private var fontForSize: Font {
@@ -94,18 +128,19 @@ extension AvatarView {
     init(_ name: String, size: CGFloat = 44) {
         self.text = name
         self.imageName = nil
+        self.imageUrl = nil
         self.size = size
         self.style = .standard
     }
     
-    /// Creates a gradient avatar (typically for current user)
-    static func gradient(name: String, size: CGFloat = 72) -> AvatarView {
-        AvatarView(text: name, imageName: nil, size: size, style: .gradient)
+    /// Creates a gradient avatar (typically for current user profile)
+    static func gradient(name: String, imageUrl: String? = nil, size: CGFloat = 72) -> AvatarView {
+        AvatarView(text: name, imageName: nil, imageUrl: imageUrl, size: size, style: .gradient)
     }
     
     /// Creates an accent-colored avatar
-    static func accent(name: String, size: CGFloat = 44) -> AvatarView {
-        AvatarView(text: name, imageName: nil, size: size, style: .accent)
+    static func accent(name: String, imageUrl: String? = nil, size: CGFloat = 44) -> AvatarView {
+        AvatarView(text: name, imageName: nil, imageUrl: imageUrl, size: size, style: .accent)
     }
 }
 

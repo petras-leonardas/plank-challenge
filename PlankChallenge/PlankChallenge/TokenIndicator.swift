@@ -19,13 +19,13 @@ struct TokenIndicator: View {
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: "snowflake")
-                .foregroundStyle(.cyan)
+                .foregroundStyle(Color.tealAccent)
             
             HStack(spacing: 2) {
                 ForEach(0..<maxTokens, id: \.self) { index in
                     Image(systemName: index < tokensRemaining ? "circle.fill" : "circle")
                         .font(.caption2)
-                        .foregroundStyle(index < tokensRemaining ? .cyan : .gray.opacity(0.3))
+                        .foregroundStyle(index < tokensRemaining ? Color.tealAccent : Color.gray.opacity(0.3))
                 }
             }
         }

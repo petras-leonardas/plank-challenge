@@ -63,16 +63,16 @@ struct StreakHeroView: View {
                 .foregroundStyle(.primary)
             
             // "DAY STREAK" Label
-            Text(currentStreak == 1 ? "DAY STREAK" : "DAY STREAK")
+            Text("DAY STREAK")
                 .font(.subheadline)
                 .fontWeight(.semibold)
                 .foregroundStyle(.secondary)
             
             // Personal Best / New Record Message
             if isNewRecord {
-                Text("🎉 New personal best!")
+                Text("New personal best!")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.streakColor)
                     .padding(.top, 4)
             } else {
                 Text("Personal best: \(longestStreak) days")

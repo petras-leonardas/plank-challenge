@@ -7,6 +7,26 @@
 
 import SwiftUI
 
+// MARK: - Onboarding Primary Button Style
+
+/// White-background, accent-foreground full-width button used on dark gradient onboarding screens.
+/// Height: 56pt. Corner radius: `Constants.UI.sheetRadius` (16). Horizontal padding managed by the call site.
+struct OnboardingPrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.headline)
+            .fontWeight(.semibold)
+            .foregroundStyle(Color.appAccent)
+            .frame(maxWidth: .infinity)
+            .frame(height: 56)
+            .background(.white)
+            .clipShape(RoundedRectangle(cornerRadius: Constants.UI.sheetRadius))
+            .opacity(configuration.isPressed ? 0.9 : 1.0)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
 // MARK: - Primary Button Style
 
 /// Full-width primary action button with blue background
@@ -161,6 +181,18 @@ struct IconButtonStyle: ButtonStyle {
             .background(backgroundColor.opacity(configuration.isPressed ? 0.2 : 1.0))
             .clipShape(Circle())
             .scaleEffect(configuration.isPressed ? 0.92 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Plank Button Style
+
+/// Scale-down press effect for the main plank circle button
+/// Provides subtle tactile feedback without changing the button's appearance
+struct PlankButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
             .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
     }
 }

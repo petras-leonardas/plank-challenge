@@ -128,15 +128,40 @@ extension Color {
     /// Discover card purple gradient end
     static let discoverPurpleEnd = Color(red: 180/255, green: 100/255, blue: 255/255)
     
+    // MARK: - Rank Colors (Leaderboard)
+    
+    /// Gold rank badge color (rank #1)
+    static let rankGold = Color.yellow
+    
+    /// Silver rank badge color (rank #2)
+    static let rankSilver = Color(red: 192/255, green: 192/255, blue: 192/255)
+    
+    /// Bronze rank badge color (rank #3)
+    static let rankBronze = Color(red: 205/255, green: 127/255, blue: 50/255)
+    
+    // MARK: - Overlay / Scrim
+    
+    /// Standard dark overlay for modals and loading screens
+    static let overlayScrim = Color.black.opacity(0.3)
+    
+    // MARK: - Stat Card Background
+    
+    /// Soft background for inline stat boxes (inside cards)
+    static let statCardBackground = Color(red: 240/255, green: 245/255, blue: 251/255) // same as softBlueBackground
+    
     // MARK: - Plank Type Colors
     
     static func colorForPlankType(_ type: Constants.Plank.PlankType) -> Color {
         switch type {
         case .elbow:
             return .blue
-        case .straightArm:
+        case .high:
             return .green
-        case .parallettes:
+        case .sideLeft:
+            return .orange
+        case .sideRight:
+            return .orange
+        case .reverse:
             return .purple
         }
     }
@@ -188,6 +213,27 @@ struct AppBackground: View {
                 Spacer()
             }
         }
+    }
+}
+
+// MARK: - Time Formatting
+
+extension TimeInterval {
+    /// Formats a plank duration as "mm:ss" (e.g. "01:05", "00:30")
+    var formattedPlankTime: String {
+        let minutes = Int(self) / 60
+        let seconds = Int(self) % 60
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
+}
+
+// MARK: - Navigation Bar Style
+
+extension View {
+    /// Applies the standard app navigation bar background tint.
+    /// Use on the outermost `NavigationStack` or embedded view.
+    func appNavigationBarStyle() -> some View {
+        self.toolbarBackground(Color.subtleBlueGradientStart.opacity(0.5), for: .navigationBar)
     }
 }
 

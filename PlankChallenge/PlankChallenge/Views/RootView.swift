@@ -1,0 +1,111 @@
+import SwiftUI
+
+/// Root view that switches between authentication, onboarding, and main content.
+///
+/// State machine:
+/// - `.unknown`        → Loading spinner (session restore in progress)
+/// - `.unauthenticated` → AuthenticationView
+/// - `.authenticated` + needs onboarding → OnboardingContainerView
+/// - `.authenticated` + onboarding done  → MainTabView
+struct RootView: View {
+    @Environment(\.authService) private var authService
+    @Environment(\.userService) private var userService
+    @Environment(\.plankService) private var plankService
+    @Environment(\.streakService) private var streakService
+    @Environment(\.badgeService) private var badgeService
+    @Environment(\.groupService) private var groupService
+    @Environment(\.leaderboardService) private var leaderboardService
+    @Environment(\.notificationService) private var notificationService
+    @Environment(\.mediaService) private var mediaService
+    
+    /// Observing this via @AppStorage ensures SwiftUI re-renders when
+    /// OnboardingNotificationsView writes `true` to UserDefaults on completion,
+    /// which flips `needsOnboarding` to `false` and transitions to MainTabView.
+    @AppStorage(AppConfig.UserDefaultsKeys.hasCompletedOnboarding)
+    private var hasCompletedOnboarding = false
+    
+    var body: some View {
+        Group {
+            switch authService.state {
+            case .unknown:
+                // Session restoration in progress
+                loadingView
+                
+            case .unauthenticated:
+                AuthenticationView()
+                    .transition(.opacity)
+                
+            case .authenticated:
+                if authService.needsOnboarding {
+                    // New user — walk them through the onboarding flow
+                    OnboardingContainerView()
+                        .transition(.opacity)
+                } else {
+                    // Returning user — straight to the app
+                    MainTabView()
+                        .transition(.opacity)
+                }
+            }
+        }
+        .animation(.easeInOut(duration: 0.3), value: authService.state)
+        .animation(.easeInOut(duration: 0.3), value: hasCompletedOnboarding)
+        .task {
+            await authService.restoreSession()
+        }
+        .onChange(of: authService.state) { _, newState in
+            // When the user signs out or their session expires, clear all
+            // service caches to prevent data leaking into the next session.
+            if case .unauthenticated = newState {
+                plankService.clearData()
+                streakService.clearData()
+                badgeService.clearData()
+                userService.clearData()
+                groupService.clearData()
+                leaderboardService.clearData()
+                notificationService.clearData()
+                mediaService.clearData()
+                
+                // Clear @AppStorage today-plank state so a different user signing
+                // in on the same device on the same day doesn't see the previous
+                // user's plank count and timer state.
+                UserDefaults.standard.removeObject(forKey: "todayPlankDate")
+                UserDefaults.standard.removeObject(forKey: "todayPlankTotalTime")
+                UserDefaults.standard.removeObject(forKey: "todayPlankCount")
+                UserDefaults.standard.removeObject(forKey: "todayPlankTimesJSON")
+                // Note: "soundEnabled" (@AppStorage in PlankTimerView) is intentionally
+                // NOT cleared on logout — it is a device-level UI preference, not user
+                // data. A user who prefers silent mode should not have to reconfigure it
+                // after every login.
+            }
+        }
+    }
+    
+    // MARK: - Loading View
+    
+    private var loadingView: some View {
+        VStack(spacing: 20) {
+            // App logo
+            Image("AppLogoColour")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 100, height: 100)
+            
+            // Loading indicator
+            ProgressView()
+                .scaleEffect(1.2)
+            
+            Text("Loading...")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground))
+    }
+}
+
+// MARK: - Preview
+
+#Preview("Loading") {
+    RootView()
+        .environment(AuthService.shared)
+}

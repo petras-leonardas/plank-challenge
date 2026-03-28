@@ -1,0 +1,52 @@
+name = "plank-challenge-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+account_id = "0644b2da0e70bd12883572fd98db4874"
+
+# Development settings
+[dev]
+port = 8787
+local_protocol = "http"
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "plank-challenge-db"
+database_id = "3cb80504-ac23-4bba-bdf3-77cfed3de736"
+
+# KV Namespace bindings
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "421154a5d19b429e8b9aebfe49d04206"
+
+[[kv_namespaces]]
+binding = "CACHE"
+id = "29960987c76947ecbff018e87c2b8a77"
+
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "14d4a11ce21f4ee2b3a27b03922817e8"
+
+# R2 Bucket binding
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "plank-challenge-media"
+
+# Queue bindings
+[[queues.producers]]
+binding = "BADGE_QUEUE"
+queue = "badge-calculation"
+
+[[queues.producers]]
+binding = "NOTIFICATION_QUEUE"
+queue = "push-notifications"
+
+# Environment variables (secrets should use wrangler secret)
+[vars]
+ENVIRONMENT = "production"
+API_VERSION = "v1"
+MEDIA_BASE_URL = "https://pub-9c3732c9a3a043628ef134e1290c8b74.r2.dev"
+
+# Local development overrides
+[env.development.vars]
+ENVIRONMENT = "development"

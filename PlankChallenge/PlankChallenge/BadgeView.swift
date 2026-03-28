@@ -7,7 +7,9 @@
 
 import SwiftUI
 
-struct BadgeView: View {
+/// Legacy badge view using the local `Badge.BadgeType` model.
+/// For the API-powered badge display use `APIBadgeDisplayView` in Components/BadgeView.swift.
+struct LegacyBadgeView: View {
     let badgeType: Badge.BadgeType
     let isEarned: Bool
     let dateEarned: Date?
@@ -47,13 +49,13 @@ struct BadgeView: View {
 
 #Preview {
     HStack {
-        BadgeView(
+        LegacyBadgeView(
             badgeType: .streak7,
             isEarned: true,
             dateEarned: Date()
         )
         
-        BadgeView(
+        LegacyBadgeView(
             badgeType: .streak30,
             isEarned: false,
             dateEarned: nil

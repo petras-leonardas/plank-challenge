@@ -9,10 +9,21 @@
 import SwiftUI
 
 struct StreakCalendarView: View {
-    let plankSessions: [PlankSession]
+    @Environment(\.streakService) private var streakService
     
     private let calendar = Calendar.current
     private let weekdays = ["M", "T", "W", "T", "F", "S", "S"]
+    
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        return formatter
+    }()
+    
+    private func parseDate(_ dateString: String) -> Date? {
+        Self.dateFormatter.date(from: dateString)
+    }
     
     // MARK: - Computed Properties
     
@@ -31,15 +42,19 @@ struct StreakCalendarView: View {
     }
     
     private var daysWithPlanks: Set<Int> {
-        let components = calendar.dateComponents([.year, .month], from: currentDate)
+        let currentComponents = calendar.dateComponents([.year, .month], from: currentDate)
         var days = Set<Int>()
         
-        for session in plankSessions {
-            let sessionComponents = calendar.dateComponents([.year, .month, .day], from: session.date)
-            if sessionComponents.year == components.year && sessionComponents.month == components.month {
-                if let day = sessionComponents.day {
-                    days.insert(day)
-                }
+        for activity in streakService.recentActivity {
+            guard activity.planks > 0,
+                  let date = parseDate(activity.date) else { continue }
+            
+            let activityComponents = calendar.dateComponents([.year, .month, .day], from: date)
+            
+            if activityComponents.year == currentComponents.year &&
+               activityComponents.month == currentComponents.month,
+               let day = activityComponents.day {
+                days.insert(day)
             }
         }
         return days
@@ -74,10 +89,7 @@ struct StreakCalendarView: View {
             // Calendar Grid
             calendarGrid
         }
-        .padding(16)
-        .background(Color.warmWhiteCard)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+        .appCardStyle()
     }
     
     // MARK: - Month Header
@@ -184,45 +196,11 @@ struct CalendarDayCell: View {
 #Preview("Streak Calendar") {
     ScrollView {
         VStack(spacing: 20) {
-            StreakCalendarView(
-                plankSessions: generateMockSessions()
-            )
-            .padding(.horizontal, 16)
+            StreakCalendarView()
+                .padding(.horizontal, 16)
         }
         .padding(.vertical, 20)
     }
     .background(Color.softBlueBackground)
-}
-
-// Helper function for preview
-private func generateMockSessions() -> [PlankSession] {
-    let calendar = Calendar.current
-    let today = Date()
-    var sessions: [PlankSession] = []
-    
-    // Generate sessions for the past 14 days (current streak)
-    for daysAgo in 0..<14 {
-        if let date = calendar.date(byAdding: .day, value: -daysAgo, to: today) {
-            sessions.append(PlankSession(
-                date: date,
-                durationSeconds: Double.random(in: 60...180),
-                plankType: .elbow,
-                inputMethod: .timer
-            ))
-        }
-    }
-    
-    // Add a few more random sessions earlier in the month
-    for daysAgo in [16, 18, 20, 22] {
-        if let date = calendar.date(byAdding: .day, value: -daysAgo, to: today) {
-            sessions.append(PlankSession(
-                date: date,
-                durationSeconds: Double.random(in: 60...180),
-                plankType: .elbow,
-                inputMethod: .timer
-            ))
-        }
-    }
-    
-    return sessions
+    .withMockServices()
 }

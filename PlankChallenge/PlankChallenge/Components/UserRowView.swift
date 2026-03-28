@@ -166,15 +166,8 @@ struct UserRowWithFollowButton: View {
             // Follow Button
             Button(action: onFollowTap) {
                 Text(isFollowing ? "Following" : "Follow")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(isFollowing ? .secondary : .white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
-                    .background(isFollowing ? Color.gray.opacity(0.15) : Color.appAccent)
-                    .clipShape(Capsule())
             }
-            .buttonStyle(.plain)
+            .pillButtonStyle(isSelected: !isFollowing)
         }
     }
 }
@@ -241,20 +234,6 @@ struct UserRowWithAdminBadge: View {
                     .foregroundStyle(.tertiary)
             }
         }
-    }
-}
-
-// MARK: - Convenience Initializers for MockUser
-
-extension UserRowView {
-    init(user: MockUser, subtitle: String? = nil, size: UserRowSize = .regular, showChevron: Bool = false) {
-        self.name = user.displayName
-        self.subtitle = subtitle ?? "\(user.currentStreak) day streak"
-        self.avatarText = String(user.displayName.prefix(1))
-        self.avatarImageName = user.profileImageName
-        self.size = size
-        self.showChevron = showChevron
-        self.trailingContent = nil
     }
 }
 
