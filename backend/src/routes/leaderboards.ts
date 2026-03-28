@@ -1039,98 +1039,26 @@ leaderboards.get('/friends', authMiddleware, zValidator('query', friendsLeaderbo
   const params: (string | number)[] = [];
   const countParams: (string | number)[] = [];
   
-  if (period === 'all' || type === 'streak') {
-    // Simple query on users table (using denormalized fields)
-    // For streak with period filter, we need to add the date filter with parameterized query
-    const needsPeriodFilter = type === 'streak' && period !== 'all';
-    
-    if (needsPeriodFilter) {
-      query = `
-        SELECT u.* FROM users u
-        WHERE u.deleted_at IS NULL
-          AND u.${minValueFilter}
-          AND u.last_plank_date >= ?
-          AND (
-            u.id = ? 
-            OR u.id IN (SELECT following_id FROM follows WHERE follower_id = ?)
-          )
-        ORDER BY u.${orderField} DESC, u.updated_at DESC
-        LIMIT ? OFFSET ?
-      `;
-      params.push(periodStart!, userId, userId, limit, offset);
-      
-      countQuery = `
-        SELECT COUNT(*) as count FROM users u
-        WHERE u.deleted_at IS NULL
-          AND u.${minValueFilter}
-          AND u.last_plank_date >= ?
-          AND (
-            u.id = ? 
-            OR u.id IN (SELECT following_id FROM follows WHERE follower_id = ?)
-          )
-      `;
-      countParams.push(periodStart!, userId, userId);
-    } else {
-      query = `
-        SELECT u.* FROM users u
-        WHERE u.deleted_at IS NULL
-          AND u.${minValueFilter}
-          AND (
-            u.id = ? 
-            OR u.id IN (SELECT following_id FROM follows WHERE follower_id = ?)
-          )
-        ORDER BY u.${orderField} DESC, u.updated_at DESC
-        LIMIT ? OFFSET ?
-      `;
-      params.push(userId, userId, limit, offset);
-      
-      countQuery = `
-        SELECT COUNT(*) as count FROM users u
-        WHERE u.deleted_at IS NULL
-          AND u.${minValueFilter}
-          AND (
-            u.id = ? 
-            OR u.id IN (SELECT following_id FROM follows WHERE follower_id = ?)
-          )
-      `;
-      countParams.push(userId, userId);
-    }
-  } else {
-    // Period-based query for non-streak types - need to aggregate from plank_sessions
-    const aggFunc = type === 'duration' ? 'MAX' : (type === 'total_planks' ? 'COUNT' : 'SUM');
-    const aggField = type === 'total_planks' ? 'p.id' : 'p.duration_seconds';
-    
-    query = `
-      SELECT u.*, ${aggFunc}(${aggField}) as period_value
-      FROM users u
-      INNER JOIN plank_sessions p ON u.id = p.user_id
-      WHERE u.deleted_at IS NULL 
-        AND p.deleted_at IS NULL
-        AND p.performed_at >= ?
-        AND (
-          u.id = ? 
-          OR u.id IN (SELECT following_id FROM follows WHERE follower_id = ?)
-        )
-      GROUP BY u.id
-      ORDER BY period_value DESC, MAX(p.performed_at) DESC
-      LIMIT ? OFFSET ?
-    `;
-    params.push(periodStart!, userId, userId, limit, offset);
-    
-    countQuery = `
-      SELECT COUNT(DISTINCT u.id) as count
-      FROM users u
-      INNER JOIN plank_sessions p ON u.id = p.user_id
-      WHERE u.deleted_at IS NULL 
-        AND p.deleted_at IS NULL
-        AND p.performed_at >= ?
-        AND (
-          u.id = ? 
-          OR u.id IN (SELECT following_id FROM follows WHERE follower_id = ?)
-        )
-    `;
-    countParams.push(periodStart!, userId, userId);
-  }
+  // Following list — sorted by most recent plank date (who planked most recently appears first).
+  // The current user is excluded (u.id != ?) — you already know your own stats.
+  // Only people the current user follows are shown (strict following, not mutual).
+  query = `
+    SELECT u.* FROM users u
+    WHERE u.deleted_at IS NULL
+      AND u.id != ?
+      AND u.id IN (SELECT following_id FROM follows WHERE follower_id = ?)
+    ORDER BY u.last_plank_date DESC NULLS LAST, u.display_name ASC
+    LIMIT ? OFFSET ?
+  `;
+  params.push(userId, userId, limit, offset);
+
+  countQuery = `
+    SELECT COUNT(*) as count FROM users u
+    WHERE u.deleted_at IS NULL
+      AND u.id != ?
+      AND u.id IN (SELECT following_id FROM follows WHERE follower_id = ?)
+  `;
+  countParams.push(userId, userId);
   
   const results = await db
     .prepare(query)
@@ -1144,22 +1072,39 @@ leaderboards.get('/friends', authMiddleware, zValidator('query', friendsLeaderbo
   
   const total = countResult?.count || 0;
   
+  // Following list: show current streak as score, last plank date as label.
+  // Sorted by recency so the displayed value (streak) is informational, not competitive.
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().slice(0, 10);
+
   const entries = (results.results || []).map((user, index) => {
     const rank = offset + index + 1;
-    // For period queries with aggregation, use period_value; otherwise use the extractor
-    const score = (period !== 'all' && type !== 'streak' && user.period_value !== undefined)
-      ? user.period_value
-      : scoreExtractor(user);
-    const scoreLabel = scoreFormatter(score);
+    const streak = user.current_streak || 0;
+    const score = streak;
+    
+    // Human-readable last-plank label
+    let scoreLabel: string;
+    if (!user.last_plank_date) {
+      scoreLabel = 'No planks yet';
+    } else if (user.last_plank_date >= todayStr) {
+      scoreLabel = streak > 0 ? `${streak} day streak` : 'Planked today';
+    } else if (user.last_plank_date >= yesterdayStr) {
+      scoreLabel = streak > 0 ? `${streak} day streak` : 'Planked yesterday';
+    } else {
+      scoreLabel = streak > 0 ? `${streak} day streak` : `Last: ${user.last_plank_date}`;
+    }
     
     return formatLeaderboardEntry(user, rank, score, scoreLabel, {
-      isCurrentUser: user.id === userId,
+      isCurrentUser: false, // current user is excluded from this list
     });
   });
   
   return success(c, {
-    type: `friends_${type}`,
-    metric: type,
+    type: 'following',
+    metric: 'last_plank_date',
     period,
     entries,
     pagination: {

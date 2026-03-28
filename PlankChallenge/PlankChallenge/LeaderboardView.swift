@@ -12,7 +12,7 @@ import SwiftUI
 enum LeaderboardTab: String, CaseIterable {
     case streak = "Streak"
     case longestPlank = "Longest Plank"
-    case friends = "Friends"
+    case friends = "Following"
     
     var serviceType: LeaderboardService.LeaderboardType {
         switch self {

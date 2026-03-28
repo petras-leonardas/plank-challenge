@@ -380,7 +380,7 @@ struct CompactLeaderboardView: View {
                 ProgressView()
                     .padding(.vertical, 40)
             } else if activeLeaderboard.isEmpty {
-                Text(selectedTab == .friends ? "Follow people to see a friends leaderboard" : "No leaderboard data")
+                Text(selectedTab == .friends ? "Follow people to see who's been active" : "No leaderboard data")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
