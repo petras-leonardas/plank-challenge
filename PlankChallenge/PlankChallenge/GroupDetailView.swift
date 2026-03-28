@@ -309,7 +309,10 @@ struct GroupDetailView: View {
     
     @ViewBuilder
     private func actionsSection(_ group: APIGroup) -> some View {
-        if groupService.isCurrentUserMember && !groupService.isCurrentUserAdmin {
+        if groupService.isCurrentUserAdmin {
+            // Owner/admin — no action button here; manage the group via the gear icon
+            EmptyView()
+        } else if groupService.isCurrentUserMember {
             Button(role: .destructive) {
                 showingLeaveConfirmation = true
             } label: {
