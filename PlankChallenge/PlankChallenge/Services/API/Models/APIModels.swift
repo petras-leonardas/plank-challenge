@@ -733,9 +733,11 @@ struct GroupDetailResponse: Decodable {
     }
     
     /// Convenience: membership info if the user is a member.
+    /// Note: `role` is only present in the response for admins. Regular members
+    /// get `isMember: true` but no `role` field — so we default to "member".
     var membership: MembershipInfo? {
-        guard isMember == true, let role else { return nil }
-        return MembershipInfo(role: role)
+        guard isMember == true else { return nil }
+        return MembershipInfo(role: role ?? "member")
     }
     
     struct MembershipInfo {
