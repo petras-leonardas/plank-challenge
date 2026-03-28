@@ -454,13 +454,14 @@ struct GroupLeaderboardRow: View {
         }
     }
     
-    private func formatDuration(_ seconds: Int) -> String {
-        if seconds >= 60 {
-            let mins = seconds / 60
-            let secs = seconds % 60
+    private func formatDuration(_ seconds: Double) -> String {
+        let total = Int(seconds)
+        if total >= 60 {
+            let mins = total / 60
+            let secs = total % 60
             return secs > 0 ? "\(mins)m \(secs)s" : "\(mins)m"
         }
-        return "\(seconds)s"
+        return "\(total)s"
     }
 }
 

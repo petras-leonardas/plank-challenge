@@ -792,9 +792,12 @@ struct GroupLeaderboardEntry: Decodable, Identifiable, Sendable {
     }
     
     struct GroupLeaderboardStats: Decodable, Sendable {
-        let totalDuration: Int
+        /// Total plank duration in seconds — stored as Double because the
+        /// backend returns floating-point values from SUM(duration_seconds).
+        let totalDuration: Double
         let plankCount: Int
-        let bestPlank: Int
+        /// Best single plank in seconds — also floating-point from the DB.
+        let bestPlank: Double
     }
 }
 
