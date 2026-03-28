@@ -25,27 +25,36 @@ struct GroupSettingsView: View {
     @State private var showingDeleteError = false
     
     var body: some View {
-        Group {
-            if let group = groupService.currentGroup {
-                settingsForm(group)
-            } else if groupService.isLoading {
-                loadingView
-            } else {
-                Text("Group not found")
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .navigationTitle("Group Settings")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                if isSaving {
-                    ProgressView()
+        NavigationStack {
+            Group {
+                if let group = groupService.currentGroup {
+                    settingsForm(group)
+                } else if groupService.isLoading {
+                    loadingView
                 } else {
-                    Button("Save") {
-                        Task { await saveSettings() }
+                    Text("Group not found")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("Group Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
                     }
-                    .disabled(groupName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(isSaving || isDeleting)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if isSaving {
+                        ProgressView()
+                    } else {
+                        Button("Save") {
+                            Task { await saveSettings() }
+                        }
+                        .fontWeight(.semibold)
+                        .disabled(groupName.trimmingCharacters(in: .whitespaces).isEmpty || isDeleting)
+                    }
                 }
             }
         }
