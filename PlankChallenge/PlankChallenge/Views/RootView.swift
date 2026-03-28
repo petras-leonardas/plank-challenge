@@ -53,9 +53,27 @@ struct RootView: View {
             await authService.restoreSession()
         }
         .onChange(of: authService.state) { _, newState in
-            // When the user signs out or their session expires, clear all
-            // service caches to prevent data leaking into the next session.
-            if case .unauthenticated = newState {
+            switch newState {
+            case .authenticated:
+                // Pre-warm streak and plank data as soon as the session is
+                // confirmed — before any tab renders. This ensures PlankTimerView
+                // shows the correct streak immediately on cold launch instead of
+                // briefly displaying "0 day streak" until the Progress tab is visited.
+                Task {
+                    async let streakFetch: () = {
+                        guard !streakService.hasLoaded else { return }
+                        try? await streakService.fetchStreak()
+                    }()
+                    async let plankFetch: () = {
+                        guard !plankService.hasLoaded else { return }
+                        try? await plankService.fetchPlanks(refresh: false)
+                    }()
+                    _ = await (streakFetch, plankFetch)
+                }
+                
+            case .unauthenticated:
+                // When the user signs out or their session expires, clear all
+                // service caches to prevent data leaking into the next session.
                 plankService.clearData()
                 streakService.clearData()
                 badgeService.clearData()
@@ -76,6 +94,9 @@ struct RootView: View {
                 // NOT cleared on logout — it is a device-level UI preference, not user
                 // data. A user who prefers silent mode should not have to reconfigure it
                 // after every login.
+                
+            case .unknown:
+                break
             }
         }
     }
