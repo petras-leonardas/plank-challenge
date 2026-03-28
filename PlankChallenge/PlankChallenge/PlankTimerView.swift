@@ -226,6 +226,36 @@ struct PlankTimerView: View {
                     }
                 }
             }
+            
+            // Also reconcile todayPlankTimesJSON from the server-synced planks list.
+            // SettingsView reads exclusively from todayPlankTimesJSON to display
+            // "Today's Planks" — if this is empty (e.g. fresh install, different device,
+            // logout/login) it shows "Nothing yet today" even when the plank tab correctly
+            // shows the streak and checkmark. Only populate when the local list is empty
+            // to avoid overwriting a valid in-progress session.
+            if todayPlankTimes.isEmpty && serverCount > 0 {
+                let todayStr = todayDateString()
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "yyyy-MM-dd"
+                // No explicit timeZone → matches device local time, consistent with todayDateString()
+                
+                let isoFormatter = ISO8601DateFormatter()
+                isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                
+                let todayDurations: [Double] = plankService.planks.compactMap { plank in
+                    // Try full ISO8601 with fractional seconds first, then without
+                    let date = isoFormatter.date(from: plank.performedAt)
+                        ?? ISO8601DateFormatter().date(from: plank.performedAt)
+                    guard let date, dateFormatter.string(from: date) == todayStr else { return nil }
+                    return plank.durationSeconds
+                }
+                
+                if !todayDurations.isEmpty,
+                   let encoded = try? JSONEncoder().encode(todayDurations),
+                   let json = String(data: encoded, encoding: .utf8) {
+                    todayPlankTimesJSON = json
+                }
+            }
         }
     }
     
