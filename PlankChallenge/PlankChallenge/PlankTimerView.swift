@@ -251,6 +251,46 @@ struct PlankTimerView: View {
                 }
             }
         }
+        .onChange(of: plankService.hasPlankToday) { _, hasPlank in
+            // React to plank state changes driven by PlankService rather than the
+            // in-app timer. This covers two cases:
+            //
+            // 1. Manual entry: the user submits via the + sheet. createPlank() inserts
+            //    the plank into planks[], hasPlankToday flips true → false, but
+            //    hasLoaded never changes so the hasLoaded observer doesn't fire.
+            //
+            // 2. Delete from Settings: plankService.deletePlank() removes the plank,
+            //    hasPlankToday flips true → false, and the timer should reset to .ready.
+            let today = todayDateString()
+            
+            if hasPlank && timerState == .ready {
+                // Plank was submitted externally (manual entry) — update AppStorage
+                // and transition to the completed state.
+                todayPlankCount = 1
+                todayPlankDateString = today
+                
+                if let duration = plankService.todaysPlank?.durationSeconds,
+                   let encoded = try? JSONEncoder().encode([duration]),
+                   let json = String(data: encoded, encoding: .utf8) {
+                    todayPlankTimesJSON = json
+                    todayPlankTotalTime = duration
+                }
+                
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    timerState = .completedToday
+                }
+                
+            } else if !hasPlank && timerState == .completedToday {
+                // Plank was deleted from Settings — reset AppStorage and go back to ready.
+                todayPlankCount = 0
+                todayPlankTimesJSON = "[]"
+                todayPlankTotalTime = 0
+                
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    timerState = .ready
+                }
+            }
+        }
     }
     
     /// Check if it's a new day (reset state) or if we already have planks today (show completedToday)
