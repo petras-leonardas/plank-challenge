@@ -1695,19 +1695,20 @@ groups.get('/:id/leaderboard', optionalAuthMiddleware, async (c) => {
     }>();
   
   // Format and add rank
+  // Keys are snake_case so the iOS JSONDecoder (.convertFromSnakeCase) maps them correctly.
   const leaderboard = (results.results || []).map((entry, index) => ({
     rank: index + 1,
     user: {
       id: entry.id,
-      displayName: entry.display_name,
+      display_name: entry.display_name,
       username: entry.username,
-      profileImageUrl: entry.profile_image_url,
-      currentStreak: entry.current_streak,
+      profile_image_url: entry.profile_image_url,
+      current_streak: entry.current_streak,
     },
     stats: {
-      totalDuration: entry.total_duration,
-      plankCount: entry.plank_count,
-      bestPlank: entry.best_plank || 0,
+      total_duration: entry.total_duration,
+      plank_count: entry.plank_count,
+      best_plank: entry.best_plank || 0,
     },
   }));
   
@@ -1832,15 +1833,15 @@ groups.get('/:id/leaderboard', optionalAuthMiddleware, async (c) => {
               rank: userRankIndex + 1,
               user: {
                 id: userDetails.id,
-                displayName: userDetails.display_name,
+                display_name: userDetails.display_name,
                 username: userDetails.username,
-                profileImageUrl: userDetails.profile_image_url,
-                currentStreak: userDetails.current_streak,
+                profile_image_url: userDetails.profile_image_url,
+                current_streak: userDetails.current_streak,
               },
               stats: {
-                totalDuration: userMemberData.total_duration,
-                plankCount: userPlankStats?.plank_count || 0,
-                bestPlank: userPlankStats?.best_plank || 0,
+                total_duration: userMemberData.total_duration,
+                plank_count: userPlankStats?.plank_count || 0,
+                best_plank: userPlankStats?.best_plank || 0,
               },
             };
           }

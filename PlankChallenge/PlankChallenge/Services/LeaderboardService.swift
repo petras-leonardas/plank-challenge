@@ -60,12 +60,11 @@ final class LeaderboardService: LeaderboardServiceProtocol {
     }
     
     /// Time periods for leaderboards.
-    /// Raw values match the backend's accepted `period` query parameter values.
-    /// Note: backend does not support `daily` — smallest period is `weekly`.
+    /// Raw values match the backend's VALID_PERIODS: ['day', 'week', 'month', 'all']
     enum LeaderboardPeriod: String, CaseIterable {
-        case weekly = "weekly"
-        case monthly = "monthly"
-        case allTime = "all_time"
+        case weekly = "week"
+        case monthly = "month"
+        case allTime = "all"
         
         var displayName: String {
             switch self {
