@@ -95,8 +95,8 @@ struct UserProfileView: View {
             )
             .accessibilityHidden(true)
             
-            // Name
-            VStack(spacing: 4) {
+            // Name, username, location, bio
+            VStack(spacing: 6) {
                 Text(user.displayName)
                     .font(.title2)
                     .fontWeight(.bold)
@@ -106,9 +106,29 @@ struct UserProfileView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
+                
+                if let location = user.location, !location.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: "mappin.and.ellipse")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(location)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                
+                if let bio = user.bio, !bio.isEmpty {
+                    Text(bio)
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
+                }
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(user.displayName)\(user.username.map { ", @\($0)" } ?? "")")
+            .accessibilityLabel("\(user.displayName)\(user.username.map { ", @\($0)" } ?? "")\(user.location.map { ", \($0)" } ?? "")")
             
             // Social counts
             HStack(spacing: 24) {

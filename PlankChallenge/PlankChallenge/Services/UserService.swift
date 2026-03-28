@@ -353,11 +353,24 @@ final class UserService: UserServiceProtocol {
         do {
             let response: FollowersResponse = try await APIClient.shared.get("/users/\(userId)/following")
             following = response.users
+            #if DEBUG
+            print("[UserService] fetchFollowing for \(userId): got \(response.users.count) users")
+            #endif
         } catch let apiError as APIClientError {
+            #if DEBUG
+            if case .decodingError(let decodingError, _) = apiError {
+                print("[UserService] fetchFollowing DECODE error: \(decodingError)")
+            } else {
+                print("[UserService] fetchFollowing API error: \(apiError)")
+            }
+            #endif
             let serviceError = UserServiceError.fromAPIError(apiError)
             self.error = serviceError
             throw serviceError
         } catch {
+            #if DEBUG
+            print("[UserService] fetchFollowing unknown error: \(error)")
+            #endif
             let serviceError = UserServiceError.unknown(error.localizedDescription)
             self.error = serviceError
             throw serviceError
@@ -415,6 +428,8 @@ final class UserService: UserServiceProtocol {
                 displayName: user.displayName,
                 username: user.username,
                 profileImageUrl: user.profileImageUrl,
+                bio: user.bio,
+                location: user.location,
                 currentStreak: user.currentStreak,
                 longestStreak: user.longestStreak,
                 totalPlanks: user.totalPlanks,
@@ -433,6 +448,8 @@ final class UserService: UserServiceProtocol {
                 displayName: suggestion.user.displayName,
                 username: suggestion.user.username,
                 profileImageUrl: suggestion.user.profileImageUrl,
+                bio: suggestion.user.bio,
+                location: suggestion.user.location,
                 currentStreak: suggestion.user.currentStreak,
                 longestStreak: suggestion.user.longestStreak,
                 totalPlanks: suggestion.user.totalPlanks,
@@ -504,6 +521,8 @@ private struct DiscoverUsersResponse: Decodable {
         let displayName: String
         let username: String?
         let profileImageUrl: String?
+        let bio: String?
+        let location: String?
         let currentStreak: Int
         let longestStreak: Int
         let totalPlanks: Int
@@ -519,6 +538,8 @@ private struct DiscoverUsersResponse: Decodable {
                 displayName: displayName,
                 username: username,
                 profileImageUrl: profileImageUrl,
+                bio: bio,
+                location: location,
                 currentStreak: currentStreak,
                 longestStreak: longestStreak,
                 totalPlanks: totalPlanks,

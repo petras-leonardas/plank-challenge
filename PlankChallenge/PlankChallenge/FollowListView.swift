@@ -174,8 +174,7 @@ struct FollowUserRow: View {
         UserRowView(
             name: user.displayName,
             subtitle: "\(user.currentStreak) day streak",
-            avatarText: String(user.displayName.prefix(1)),
-            avatarImageName: nil
+            avatarImageUrl: user.profileImageUrl
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(user.displayName), \(user.currentStreak) day streak")

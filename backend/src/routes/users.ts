@@ -108,6 +108,8 @@ function formatPublicUser(
     displayName: user.display_name,
     username: user.username,
     profileImageUrl: user.profile_image_url,
+    bio: user.bio ?? null,
+    location: user.location ?? null,
     currentStreak: user.current_streak || 0,
     longestStreak: user.longest_streak || 0,
     totalPlanks: user.total_planks || 0,

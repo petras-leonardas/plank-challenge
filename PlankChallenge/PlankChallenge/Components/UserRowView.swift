@@ -49,6 +49,7 @@ struct UserRowView: View {
     let subtitle: String?
     let avatarText: String
     let avatarImageName: String?
+    let avatarImageUrl: String?
     let size: UserRowSize
     let showChevron: Bool
     let trailingContent: AnyView?
@@ -58,6 +59,7 @@ struct UserRowView: View {
         subtitle: String? = nil,
         avatarText: String? = nil,
         avatarImageName: String? = nil,
+        avatarImageUrl: String? = nil,
         size: UserRowSize = .regular,
         showChevron: Bool = false,
         @ViewBuilder trailingContent: () -> some View = { EmptyView() }
@@ -66,6 +68,7 @@ struct UserRowView: View {
         self.subtitle = subtitle
         self.avatarText = avatarText ?? String(name.prefix(1))
         self.avatarImageName = avatarImageName
+        self.avatarImageUrl = avatarImageUrl
         self.size = size
         self.showChevron = showChevron
         
@@ -79,10 +82,11 @@ struct UserRowView: View {
     
     var body: some View {
         HStack(spacing: size.spacing) {
-            // Avatar
+            // Avatar — prefers remote URL over local asset name
             AvatarView(
                 text: avatarText,
                 imageName: avatarImageName,
+                imageUrl: avatarImageUrl,
                 size: size.avatarSize
             )
             
@@ -120,6 +124,7 @@ struct UserRowWithFollowButton: View {
     let subtitle: String?
     let avatarText: String
     let avatarImageName: String?
+    let avatarImageUrl: String?
     let isFollowing: Bool
     let onFollowTap: () -> Void
     
@@ -128,6 +133,7 @@ struct UserRowWithFollowButton: View {
         subtitle: String? = nil,
         avatarText: String? = nil,
         avatarImageName: String? = nil,
+        avatarImageUrl: String? = nil,
         isFollowing: Bool = false,
         onFollowTap: @escaping () -> Void
     ) {
@@ -135,16 +141,18 @@ struct UserRowWithFollowButton: View {
         self.subtitle = subtitle
         self.avatarText = avatarText ?? String(name.prefix(1))
         self.avatarImageName = avatarImageName
+        self.avatarImageUrl = avatarImageUrl
         self.isFollowing = isFollowing
         self.onFollowTap = onFollowTap
     }
     
     var body: some View {
         HStack(spacing: 12) {
-            // Avatar
+            // Avatar — prefers remote URL over local asset name
             AvatarView(
                 text: avatarText,
                 imageName: avatarImageName,
+                imageUrl: avatarImageUrl,
                 size: 44
             )
             
