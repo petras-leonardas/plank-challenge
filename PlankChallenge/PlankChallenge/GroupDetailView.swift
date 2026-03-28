@@ -126,11 +126,8 @@ struct GroupDetailView: View {
                 // Header
                 groupHeader(group)
                 
-                // Leaderboard section
+                // Leaderboard section (shows members + their stats)
                 leaderboardSection
-                
-                // Members section
-                membersSection(group)
                 
                 // Actions
                 actionsSection(group)
