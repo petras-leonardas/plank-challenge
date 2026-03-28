@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct GroupSettingsView: View {
     let groupId: String
@@ -17,11 +18,11 @@ struct GroupSettingsView: View {
     @State private var groupDescription: String = ""
     @State private var requiresApproval: Bool = false
     @State private var showingDeleteConfirmation = false
-    @State private var showingNotImplementedAlert = false
-    @State private var notImplementedFeature = ""
     @State private var isSaving = false
     @State private var isDeleting = false
     @State private var saveError: Error?
+    @State private var deleteError: Error?
+    @State private var showingDeleteError = false
     
     var body: some View {
         Group {
@@ -58,10 +59,10 @@ struct GroupSettingsView: View {
                 Text("All \(group.memberCount) members will be removed and notified. This can't be undone.")
             }
         }
-        .alert("Coming soon", isPresented: $showingNotImplementedAlert) {
-            Button("Got it", role: .cancel) {}
+        .alert("Couldn't delete group", isPresented: $showingDeleteError) {
+            Button("OK", role: .cancel) {}
         } message: {
-            Text("\(notImplementedFeature) isn't available yet. We'll add it in a future update.")
+            Text(deleteError?.localizedDescription ?? "Something went wrong. Try again.")
         }
         .onAppear {
             // Initialize form when view appears (works even if group already loaded)
@@ -168,9 +169,15 @@ struct GroupSettingsView: View {
     }
     
     private func shareInviteLink(code: String) {
-        // TODO: Implement share sheet with invite link when UIActivityViewController is integrated
-        notImplementedFeature = "Sharing invite links"
-        showingNotImplementedAlert = true
+        let inviteUrl = "https://plankchallenge.app/join/\(code)"
+        let activityVC = UIActivityViewController(
+            activityItems: [inviteUrl],
+            applicationActivities: nil
+        )
+        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let rootVC = scene.windows.first?.rootViewController {
+            rootVC.present(activityVC, animated: true)
+        }
     }
     
     // MARK: - Actions
@@ -180,32 +187,49 @@ struct GroupSettingsView: View {
         saveError = nil
         defer { isSaving = false }
         
-        // Check if any changes were made
-        guard let currentGroup = groupService.currentGroup else {
+        guard let currentGroup = groupService.currentGroup else { return }
+        
+        let trimmedName = groupName.trimmingCharacters(in: .whitespaces)
+        let trimmedDescription = groupDescription.trimmingCharacters(in: .whitespaces)
+        
+        let nameChanged = trimmedName != currentGroup.name
+        let descriptionChanged = trimmedDescription != (currentGroup.description ?? "")
+        let approvalChanged = requiresApproval != currentGroup.requiresApproval
+        
+        guard nameChanged || descriptionChanged || approvalChanged else {
+            // Nothing changed — just dismiss
+            dismiss()
             return
         }
         
-        let nameChanged = groupName.trimmingCharacters(in: .whitespaces) != currentGroup.name
-        let descriptionChanged = groupDescription.trimmingCharacters(in: .whitespaces) != (currentGroup.description ?? "")
-        let approvalChanged = requiresApproval != currentGroup.requiresApproval
-        
-        if nameChanged || descriptionChanged || approvalChanged {
-            // API not yet implemented - show coming soon alert
-            notImplementedFeature = "Updating group settings"
-            showingNotImplementedAlert = true
-        } else {
-            // No changes made, just dismiss
+        do {
+            try await groupService.updateGroup(
+                id: groupId,
+                name: nameChanged ? trimmedName : nil,
+                description: descriptionChanged ? trimmedDescription : nil,
+                joinMode: approvalChanged ? (requiresApproval ? "request" : "open") : nil
+            )
             dismiss()
+        } catch {
+            saveError = error
         }
     }
     
     private func deleteGroup() async {
         isDeleting = true
+        deleteError = nil
         defer { isDeleting = false }
         
-        // API not yet implemented - show coming soon alert
-        notImplementedFeature = "Deleting groups"
-        showingNotImplementedAlert = true
+        do {
+            try await groupService.deleteGroup(id: groupId)
+            // GroupService already cleared currentGroup on success.
+            // Dismissing the sheet returns to GroupDetailView, which will
+            // show the error/empty state and the user can pop back.
+            dismiss()
+        } catch {
+            deleteError = error
+            showingDeleteError = true
+        }
     }
 }
 

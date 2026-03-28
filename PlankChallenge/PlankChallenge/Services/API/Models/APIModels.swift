@@ -695,6 +695,13 @@ struct CreateGroupRequest: Encodable {
     let joinMode: String
 }
 
+/// Request body for PATCH /groups/:id
+struct UpdateGroupRequest: Encodable {
+    let name: String?
+    let description: String?
+    let joinMode: String?
+}
+
 /// Response from /groups (user's groups)
 struct GroupsListResponse: Decodable {
     let groups: [APIGroup]
@@ -940,21 +947,23 @@ extension Date {
 // MARK: - APIGroup Helpers
 
 extension APIGroup {
-    /// Whether this is a private/invite-only group
+    /// Whether this is a private group.
+    /// Backend sends groupType = "private" for private groups.
     var isPrivate: Bool {
-        joinMode == "invite_only"
+        groupType == "private"
     }
     
-    /// Maps API join mode to display-friendly type
+    /// Whether joining requires approval from the group admin.
+    /// Backend sends joinMode = "request" for approval-required groups.
     var requiresApproval: Bool {
-        joinMode == "approval"
+        joinMode == "request"
     }
     
     /// Maps to PlankGroup.JoinMode for UI compatibility
     var joinModeType: PlankGroup.JoinMode {
         switch joinMode {
         case "open": return .open
-        case "approval", "invite_only": return .requestToJoin
+        case "request": return .requestToJoin
         default: return .open
         }
     }

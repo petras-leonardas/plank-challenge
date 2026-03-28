@@ -339,6 +339,76 @@ final class GroupService: GroupServiceProtocol {
         }
     }
 
+    /// Updates group name, description, and/or join mode via PATCH /groups/:id.
+    /// Also patches the in-memory currentGroup and myGroups list on success.
+    @discardableResult
+    func updateGroup(
+        id groupId: String,
+        name: String?,
+        description: String?,
+        joinMode: String?
+    ) async throws -> APIGroup {
+        guard isValidGroupId(groupId) else {
+            let serviceError = GroupServiceError.validationError("Invalid group ID")
+            self.error = serviceError
+            throw serviceError
+        }
+        
+        isLoading = true
+        error = nil
+        defer { isLoading = false }
+        
+        let request = UpdateGroupRequest(name: name, description: description, joinMode: joinMode)
+        
+        do {
+            let response: GroupDetailResponse = try await APIClient.shared.patch(
+                "/groups/\(groupId)", body: request
+            )
+            let updated = response.group
+            // Patch in-memory state
+            currentGroup = updated
+            myGroups = myGroups.map { $0.id == groupId ? updated : $0 }
+            return updated
+        } catch let apiError as APIClientError {
+            let serviceError = GroupServiceError.fromAPIError(apiError)
+            self.error = serviceError
+            throw serviceError
+        } catch {
+            let serviceError = GroupServiceError.unknown(error.localizedDescription)
+            self.error = serviceError
+            throw serviceError
+        }
+    }
+    
+    /// Deletes the group via DELETE /groups/:id (owner only).
+    /// Clears currentGroup and removes from myGroups on success.
+    func deleteGroup(id groupId: String) async throws {
+        guard isValidGroupId(groupId) else {
+            let serviceError = GroupServiceError.validationError("Invalid group ID")
+            self.error = serviceError
+            throw serviceError
+        }
+        
+        isLoading = true
+        error = nil
+        defer { isLoading = false }
+        
+        do {
+            let _: EmptyResponse = try await APIClient.shared.delete("/groups/\(groupId)")
+            // Remove from in-memory state
+            myGroups.removeAll { $0.id == groupId }
+            clearCurrentGroup()
+        } catch let apiError as APIClientError {
+            let serviceError = GroupServiceError.fromAPIError(apiError)
+            self.error = serviceError
+            throw serviceError
+        } catch {
+            let serviceError = GroupServiceError.unknown(error.localizedDescription)
+            self.error = serviceError
+            throw serviceError
+        }
+    }
+
     /// Clears local data (call on logout)
     func clearData() {
         myGroups = []

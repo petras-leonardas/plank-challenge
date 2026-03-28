@@ -69,6 +69,13 @@ struct GroupDetailView: View {
         .sheet(isPresented: $showingSettings) {
             GroupSettingsView(groupId: groupId)
         }
+        // When the settings sheet closes after a delete, currentGroup will be nil.
+        // Pop back to the groups list automatically.
+        .onChange(of: showingSettings) { _, isShowing in
+            if !isShowing && groupService.currentGroup == nil && !groupService.isLoading {
+                dismiss()
+            }
+        }
         .alert("Leave this group?", isPresented: $showingLeaveConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Leave", role: .destructive) {

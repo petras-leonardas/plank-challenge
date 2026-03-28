@@ -220,7 +220,9 @@ async function isGroupAdmin(
   userId: string
 ): Promise<boolean> {
   const membership = await getMembership(db, groupId, userId);
-  return membership?.role === 'admin';
+  // 'owner' is the group creator; 'admin' is a promoted member.
+  // Both have admin-level access for group management operations.
+  return membership?.role === 'admin' || membership?.role === 'owner';
 }
 
 /**
@@ -365,7 +367,7 @@ groups.post('/', authMiddleware, zValidator('json', createGroupSchema), async (c
       c.env.DB
         .prepare(`
           INSERT INTO group_members (id, group_id, user_id, role, status, joined_at, updated_at)
-          VALUES (?, ?, ?, 'admin', 'active', ?, ?)
+          VALUES (?, ?, ?, 'owner', 'active', ?, ?)
         `)
         .bind(memberId, groupId, userId, now, now),
     ]);
@@ -384,7 +386,7 @@ groups.post('/', authMiddleware, zValidator('json', createGroupSchema), async (c
     return errors.serverError(c, 'Failed to retrieve created group');
   }
   
-  return success(c, formatGroup(group, { isMember: true, role: 'admin' }), 201);
+  return success(c, formatGroup(group, { isMember: true, role: 'owner' }), 201);
 });
 
 /**
@@ -522,8 +524,9 @@ groups.get('/:id', optionalAuthMiddleware, async (c) => {
     pendingRequest = (requestResult.results?.length || 0) > 0;
   }
   
-  // If user is admin, include invite code; otherwise hide it
-  if (role === 'admin') {
+  // Owner and admin get the full response including invite code and role.
+  // Regular members and non-members get the public response (no invite code, no role).
+  if (role === 'owner' || role === 'admin') {
     return success(c, formatGroup(group, { isMember, role, pendingRequest }));
   } else {
     return success(c, formatPublicGroup(group, { isMember, pendingRequest }));
