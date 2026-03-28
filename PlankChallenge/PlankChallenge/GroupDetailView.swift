@@ -15,8 +15,6 @@ struct GroupDetailView: View {
     @Environment(\.dismiss) private var dismiss
     
     @State private var selectedLeaderboard: LeaderboardType = .streak
-    @State private var showingLeaveConfirmation = false
-    @State private var isLeaving = false
     @State private var isJoining = false
     @State private var actionError: Error?
     @State private var showingActionError = false
@@ -25,6 +23,7 @@ struct GroupDetailView: View {
     /// the initial group load has finished.
     @State private var hasInitiallyLoaded = false
     @State private var showingSettings = false
+    @State private var showingMemberSettings = false
     
     enum LeaderboardType: String, CaseIterable {
         case streak = "Streak"
@@ -64,10 +63,22 @@ struct GroupDetailView: View {
                     }
                     .accessibilityLabel("Group settings")
                 }
+            } else if groupService.isCurrentUserMember {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showingMemberSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("Group options")
+                }
             }
         }
         .sheet(isPresented: $showingSettings) {
             GroupSettingsView(groupId: groupId)
+        }
+        .sheet(isPresented: $showingMemberSettings) {
+            MemberGroupSettingsView(groupId: groupId)
         }
         // When the settings sheet closes after a delete, currentGroup will be nil.
         // Pop back to the groups list automatically.
@@ -75,14 +86,6 @@ struct GroupDetailView: View {
             if !isShowing && groupService.currentGroup == nil && !groupService.isLoading {
                 dismiss()
             }
-        }
-        .alert("Leave this group?", isPresented: $showingLeaveConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Leave", role: .destructive) {
-                Task { await leaveGroup() }
-            }
-        } message: {
-            Text("You'll be removed from the leaderboard. You can always rejoin.")
         }
         .alert("Something went wrong", isPresented: $showingActionError) {
             Button("OK", role: .cancel) {}
@@ -306,21 +309,9 @@ struct GroupDetailView: View {
     
     @ViewBuilder
     private func actionsSection(_ group: APIGroup) -> some View {
-        if groupService.isCurrentUserAdmin {
-            // Owner/admin — no action button here; manage the group via the gear icon
+        if groupService.isCurrentUserMember {
+            // Members (including admin) manage the group via the gear icon in the toolbar.
             EmptyView()
-        } else if groupService.isCurrentUserMember {
-            Button(role: .destructive) {
-                showingLeaveConfirmation = true
-            } label: {
-                if isLeaving {
-                    ProgressView()
-                } else {
-                    Text("Leave Group")
-                }
-            }
-            .buttonStyle(DestructiveButtonStyle(filled: false))
-            .disabled(isLeaving)
         } else {
             Button {
                 Task { await joinGroup() }
@@ -374,21 +365,6 @@ struct GroupDetailView: View {
         }
     }
     
-    private func leaveGroup() async {
-        isLeaving = true
-        defer { isLeaving = false }
-        
-        do {
-            try await groupService.leaveGroup(id: groupId)
-            // Successfully left - navigate back
-            dismiss()
-        } catch is CancellationError {
-            // Cancelled — not a user error
-        } catch {
-            actionError = error
-            showingActionError = true
-        }
-    }
     
     private func joinGroup() async {
         isJoining = true
