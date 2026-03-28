@@ -772,10 +772,12 @@ struct APILeaderboardEntry: Decodable, Identifiable, Sendable {
     }
 }
 
-/// Response from leaderboard endpoints
+/// Response from global and friends leaderboard endpoints.
+/// Backend keys: "entries" (list), "currentUserRank" (caller's rank, optional).
+/// convertFromSnakeCase leaves camelCase keys unchanged, so these map directly.
 struct LeaderboardResponse: Decodable {
-    let leaderboard: [APILeaderboardEntry]
-    let userRank: APILeaderboardEntry?
+    let entries: [APILeaderboardEntry]
+    let currentUserRank: APILeaderboardEntry?
     let pagination: PaginationMeta?
 }
 

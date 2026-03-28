@@ -379,10 +379,12 @@ struct CompactLeaderboardView: View {
             if leaderboardService.isLoading {
                 ProgressView()
                     .padding(.vertical, 40)
-            } else if leaderboardService.globalLeaderboard.isEmpty {
-                Text("No leaderboard data")
+            } else if activeLeaderboard.isEmpty {
+                Text(selectedTab == .friends ? "Follow people to see a friends leaderboard" : "No leaderboard data")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16)
                     .padding(.vertical, 40)
             } else {
                 leaderboardContent
@@ -394,20 +396,33 @@ struct CompactLeaderboardView: View {
         }
     }
     
+    /// The leaderboard entries to display for the current tab.
+    private var activeLeaderboard: [APILeaderboardEntry] {
+        selectedTab == .friends
+            ? leaderboardService.followingLeaderboard
+            : leaderboardService.globalLeaderboard
+    }
+    
+    /// The current user's rank entry for the current tab (nil for friends tab).
+    private var activeUserRank: APILeaderboardEntry? {
+        selectedTab == .friends ? nil : leaderboardService.userGlobalRank
+    }
+    
     private var leaderboardContent: some View {
         VStack(spacing: 0) {
-            // Top 5
-            ForEach(Array(leaderboardService.globalLeaderboard.prefix(5).enumerated()), id: \.element.id) { index, entry in
+            let top5 = Array(activeLeaderboard.prefix(5))
+            
+            ForEach(Array(top5.enumerated()), id: \.element.id) { index, entry in
                 CompactLeaderboardRow(entry: entry)
                 
-                if index < min(4, leaderboardService.globalLeaderboard.count - 1) {
+                if index < top5.count - 1 {
                     Divider()
                         .padding(.horizontal, 12)
                 }
             }
             
-            // Separator if current user is not in top 5
-            if let userRank = leaderboardService.userGlobalRank, userRank.rank > 5 {
+            // Show current user's rank if they fall outside the top 5 (global tabs only)
+            if let userRank = activeUserRank, userRank.rank > 5 {
                 HStack {
                     ForEach(0..<3, id: \.self) { _ in
                         Circle()
@@ -424,11 +439,20 @@ struct CompactLeaderboardView: View {
     }
     
     private func loadLeaderboard(for tab: LeaderboardTab) async {
-        let type: LeaderboardService.LeaderboardType = tab == .streak ? .streak : .longestPlank
         do {
-            try await leaderboardService.fetchGlobalLeaderboard(type: type, period: .weekly, limit: 5)
+            switch tab {
+            case .streak:
+                try await leaderboardService.fetchGlobalLeaderboard(
+                    type: .streak, period: .weekly, limit: 5)
+            case .longestPlank:
+                try await leaderboardService.fetchGlobalLeaderboard(
+                    type: .longestPlank, period: .weekly, limit: 5)
+            case .friends:
+                try await leaderboardService.fetchFollowingLeaderboard(
+                    type: .streak, period: .weekly)
+            }
         } catch {
-            // Error handled in service
+            // Error is stored in leaderboardService.error
         }
     }
 }

@@ -28,8 +28,8 @@ const LEADERBOARD_DEFAULT_LIMIT = 50;
 /** Leaderboard types */
 type LeaderboardType = 'streak' | 'duration' | 'total_planks' | 'total_time';
 
-/** Time periods for filtering */
-type LeaderboardPeriod = 'all_time' | 'monthly' | 'weekly';
+/** Time periods for filtering — matches the groups leaderboard and iOS LeaderboardPeriod enum */
+type LeaderboardPeriod = 'all' | 'month' | 'week';
 
 // ============================================
 // VALIDATION SCHEMAS
@@ -41,14 +41,14 @@ const LEADERBOARD_MAX_OFFSET = 10000;
 const leaderboardQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(LEADERBOARD_MAX_LIMIT).optional().default(LEADERBOARD_DEFAULT_LIMIT),
   offset: z.coerce.number().int().min(0).max(LEADERBOARD_MAX_OFFSET).optional().default(0),
-  period: z.enum(['all_time', 'monthly', 'weekly']).optional().default('all_time'),
+  period: z.enum(['all', 'month', 'week']).optional().default('all'),
 });
 
 const friendsLeaderboardQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(LEADERBOARD_MAX_LIMIT).optional().default(LEADERBOARD_DEFAULT_LIMIT),
   offset: z.coerce.number().int().min(0).max(LEADERBOARD_MAX_OFFSET).optional().default(0),
-  period: z.enum(['all_time', 'monthly', 'weekly']).optional().default('all_time'),
-  type: z.enum(['streak', 'duration', 'total_planks', 'total_time']).optional().default('streak'),
+  period: z.enum(['all', 'month', 'week']).optional().default('all'),
+  type: z.enum(['streak', 'duration', 'total-planks', 'total-time']).optional().default('streak'),
 });
 
 // ============================================
@@ -104,7 +104,7 @@ function formatDuration(seconds: number): string {
  * to balance cache efficiency with freshness.
  */
 function getCacheKey(type: LeaderboardType, period: LeaderboardPeriod, limit: number, offset: number): string {
-  if (period === 'all_time') {
+  if (period === 'all') {
     return `leaderboard:${type}:${period}:${limit}:${offset}`;
   }
   // For period-based queries, include a date bucket (hourly) to ensure cache freshness
@@ -117,14 +117,14 @@ function getCacheKey(type: LeaderboardType, period: LeaderboardPeriod, limit: nu
  * Get date boundary for period filtering
  */
 function getPeriodStartDate(period: LeaderboardPeriod): string | null {
-  if (period === 'all_time') {
+  if (period === 'all') {
     return null;
   }
   
   const now = new Date();
-  if (period === 'weekly') {
+  if (period === 'week') {
     now.setDate(now.getDate() - 7);
-  } else if (period === 'monthly') {
+  } else if (period === 'month') {
     now.setDate(now.getDate() - 30);
   }
   return now.toISOString();
@@ -201,14 +201,14 @@ leaderboards.get('/streak', optionalAuthMiddleware, zValidator('query', leaderbo
     // Determine which streak field to use based on period
     // all_time: longest_streak (historical best)
     // weekly/monthly: current_streak (must be active)
-    const streakField = period === 'all_time' ? 'longest_streak' : 'current_streak';
+    const streakField = period === 'all' ? 'longest_streak' : 'current_streak';
     const periodStart = getPeriodStartDate(period);
     
     // Build the query based on period
     let query: string;
     const params: (string | number)[] = [];
     
-    if (period === 'all_time') {
+    if (period === 'all') {
       // All-time: Simple query on longest_streak
       query = `
         SELECT * FROM users
@@ -239,7 +239,7 @@ leaderboards.get('/streak', optionalAuthMiddleware, zValidator('query', leaderbo
     let countQuery: string;
     const countParams: (string | number)[] = [];
     
-    if (period === 'all_time') {
+    if (period === 'all') {
       countQuery = `SELECT COUNT(*) as count FROM users WHERE deleted_at IS NULL AND ${streakField} > 0`;
     } else {
       countQuery = `
@@ -261,7 +261,7 @@ leaderboards.get('/streak', optionalAuthMiddleware, zValidator('query', leaderbo
     // Format entries with ranks
     entries = (results.results || []).map((user, index) => {
       const rank = offset + index + 1;
-      const score = period === 'all_time' ? user.longest_streak : user.current_streak;
+      const score = period === 'all' ? user.longest_streak : user.current_streak;
       const scoreLabel = `${score} day${score !== 1 ? 's' : ''}`;
       
       return formatLeaderboardEntry(user, rank, score, scoreLabel, {
@@ -298,7 +298,7 @@ leaderboards.get('/streak', optionalAuthMiddleware, zValidator('query', leaderbo
     
     if (!isInResults) {
       // Fetch current user's rank
-      const streakField = period === 'all_time' ? 'longest_streak' : 'current_streak';
+      const streakField = period === 'all' ? 'longest_streak' : 'current_streak';
       const periodStart = getPeriodStartDate(period);
       
       const user = await db
@@ -307,14 +307,14 @@ leaderboards.get('/streak', optionalAuthMiddleware, zValidator('query', leaderbo
         .first<Pick<UserRecord, 'id' | 'current_streak' | 'longest_streak' | 'last_plank_date'>>();
       
       if (user) {
-        const userScore = period === 'all_time' ? user.longest_streak : user.current_streak;
+        const userScore = period === 'all' ? user.longest_streak : user.current_streak;
         
         // Only calculate rank if user has a qualifying score
-        if (userScore > 0 && (period === 'all_time' || (user.last_plank_date && user.last_plank_date >= (periodStart || '')))) {
+        if (userScore > 0 && (period === 'all' || (user.last_plank_date && user.last_plank_date >= (periodStart || '')))) {
           let rankQuery: string;
           const rankParams: (string | number)[] = [];
           
-          if (period === 'all_time') {
+          if (period === 'all') {
             rankQuery = `
               SELECT COUNT(*) + 1 as rank FROM users
               WHERE deleted_at IS NULL AND ${streakField} > ?
@@ -396,7 +396,7 @@ leaderboards.get('/duration', optionalAuthMiddleware, zValidator('query', leader
     let query: string;
     const params: (string | number)[] = [];
     
-    if (period === 'all_time') {
+    if (period === 'all') {
       // All-time: Use denormalized longest_plank_seconds from users table
       query = `
         SELECT * FROM users
@@ -430,7 +430,7 @@ leaderboards.get('/duration', optionalAuthMiddleware, zValidator('query', leader
     let countQuery: string;
     const countParams: (string | number)[] = [];
     
-    if (period === 'all_time') {
+    if (period === 'all') {
       countQuery = `SELECT COUNT(*) as count FROM users WHERE deleted_at IS NULL AND longest_plank_seconds > 0`;
     } else {
       countQuery = `
@@ -454,7 +454,7 @@ leaderboards.get('/duration', optionalAuthMiddleware, zValidator('query', leader
     // Format entries
     entries = (results.results || []).map((user, index) => {
       const rank = offset + index + 1;
-      const score = period === 'all_time' 
+      const score = period === 'all' 
         ? user.longest_plank_seconds 
         : (user.period_longest || 0);
       const scoreLabel = formatDuration(score);
@@ -494,7 +494,7 @@ leaderboards.get('/duration', optionalAuthMiddleware, zValidator('query', leader
     if (!isInResults) {
       const periodStart = getPeriodStartDate(period);
       
-      if (period === 'all_time') {
+      if (period === 'all') {
         const user = await db
           .prepare('SELECT longest_plank_seconds FROM users WHERE id = ?')
           .bind(currentUserId)
@@ -605,7 +605,7 @@ leaderboards.get('/total-planks', optionalAuthMiddleware, zValidator('query', le
     let query: string;
     const params: (string | number)[] = [];
     
-    if (period === 'all_time') {
+    if (period === 'all') {
       query = `
         SELECT * FROM users
         WHERE deleted_at IS NULL AND total_planks > 0
@@ -637,7 +637,7 @@ leaderboards.get('/total-planks', optionalAuthMiddleware, zValidator('query', le
     let countQuery: string;
     const countParams: (string | number)[] = [];
     
-    if (period === 'all_time') {
+    if (period === 'all') {
       countQuery = `SELECT COUNT(*) as count FROM users WHERE deleted_at IS NULL AND total_planks > 0`;
     } else {
       countQuery = `
@@ -660,7 +660,7 @@ leaderboards.get('/total-planks', optionalAuthMiddleware, zValidator('query', le
     
     entries = (results.results || []).map((user, index) => {
       const rank = offset + index + 1;
-      const score = period === 'all_time' 
+      const score = period === 'all' 
         ? user.total_planks 
         : (user.period_planks || 0);
       const scoreLabel = `${score} plank${score !== 1 ? 's' : ''}`;
@@ -698,7 +698,7 @@ leaderboards.get('/total-planks', optionalAuthMiddleware, zValidator('query', le
     if (!isInResults) {
       const periodStart = getPeriodStartDate(period);
       
-      if (period === 'all_time') {
+      if (period === 'all') {
         const user = await db
           .prepare('SELECT total_planks FROM users WHERE id = ?')
           .bind(currentUserId)
@@ -808,7 +808,7 @@ leaderboards.get('/total-time', optionalAuthMiddleware, zValidator('query', lead
     let query: string;
     const params: (string | number)[] = [];
     
-    if (period === 'all_time') {
+    if (period === 'all') {
       query = `
         SELECT * FROM users
         WHERE deleted_at IS NULL AND total_plank_seconds > 0
@@ -840,7 +840,7 @@ leaderboards.get('/total-time', optionalAuthMiddleware, zValidator('query', lead
     let countQuery: string;
     const countParams: (string | number)[] = [];
     
-    if (period === 'all_time') {
+    if (period === 'all') {
       countQuery = `SELECT COUNT(*) as count FROM users WHERE deleted_at IS NULL AND total_plank_seconds > 0`;
     } else {
       countQuery = `
@@ -863,7 +863,7 @@ leaderboards.get('/total-time', optionalAuthMiddleware, zValidator('query', lead
     
     entries = (results.results || []).map((user, index) => {
       const rank = offset + index + 1;
-      const score = period === 'all_time' 
+      const score = period === 'all' 
         ? user.total_plank_seconds 
         : (user.period_seconds || 0);
       const scoreLabel = formatDuration(score);
@@ -901,7 +901,7 @@ leaderboards.get('/total-time', optionalAuthMiddleware, zValidator('query', lead
     if (!isInResults) {
       const periodStart = getPeriodStartDate(period);
       
-      if (period === 'all_time') {
+      if (period === 'all') {
         const user = await db
           .prepare('SELECT total_plank_seconds FROM users WHERE id = ?')
           .bind(currentUserId)
@@ -1026,10 +1026,10 @@ leaderboards.get('/friends', authMiddleware, zValidator('query', friendsLeaderbo
       break;
     case 'streak':
     default:
-      orderField = period === 'all_time' ? 'longest_streak' : 'current_streak';
-      scoreExtractor = (user) => period === 'all_time' ? user.longest_streak : user.current_streak;
+      orderField = period === 'all' ? 'longest_streak' : 'current_streak';
+      scoreExtractor = (user) => period === 'all' ? user.longest_streak : user.current_streak;
       scoreFormatter = (score) => `${score} day${score !== 1 ? 's' : ''}`;
-      minValueFilter = period === 'all_time' ? 'longest_streak > 0' : 'current_streak > 0';
+      minValueFilter = period === 'all' ? 'longest_streak > 0' : 'current_streak > 0';
       break;
   }
   
@@ -1039,10 +1039,10 @@ leaderboards.get('/friends', authMiddleware, zValidator('query', friendsLeaderbo
   const params: (string | number)[] = [];
   const countParams: (string | number)[] = [];
   
-  if (period === 'all_time' || type === 'streak') {
+  if (period === 'all' || type === 'streak') {
     // Simple query on users table (using denormalized fields)
     // For streak with period filter, we need to add the date filter with parameterized query
-    const needsPeriodFilter = type === 'streak' && period !== 'all_time';
+    const needsPeriodFilter = type === 'streak' && period !== 'all';
     
     if (needsPeriodFilter) {
       query = `
@@ -1147,7 +1147,7 @@ leaderboards.get('/friends', authMiddleware, zValidator('query', friendsLeaderbo
   const entries = (results.results || []).map((user, index) => {
     const rank = offset + index + 1;
     // For period queries with aggregation, use period_value; otherwise use the extractor
-    const score = (period !== 'all_time' && type !== 'streak' && user.period_value !== undefined)
+    const score = (period !== 'all' && type !== 'streak' && user.period_value !== undefined)
       ? user.period_value
       : scoreExtractor(user);
     const scoreLabel = scoreFormatter(score);

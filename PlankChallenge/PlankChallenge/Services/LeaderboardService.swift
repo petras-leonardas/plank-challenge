@@ -163,8 +163,8 @@ final class LeaderboardService: LeaderboardServiceProtocol {
             let response: LeaderboardResponse = try await APIClient.shared.get(
                 "/leaderboards/\(type.rawValue)?period=\(period.rawValue)&limit=\(limit)"
             )
-            globalLeaderboard = response.leaderboard
-            userGlobalRank = response.userRank
+            globalLeaderboard = response.entries
+            userGlobalRank = response.currentUserRank
             isStale = false
             hasLoaded = true
         } catch let apiError as APIClientError {
@@ -198,7 +198,7 @@ final class LeaderboardService: LeaderboardServiceProtocol {
             let response: LeaderboardResponse = try await APIClient.shared.get(
                 "/leaderboards/friends?type=\(type.rawValue)&period=\(period.rawValue)"
             )
-            followingLeaderboard = response.leaderboard
+            followingLeaderboard = response.entries
             isStale = false
         } catch let apiError as APIClientError {
             let serviceError = LeaderboardServiceError.fromAPIError(apiError)
