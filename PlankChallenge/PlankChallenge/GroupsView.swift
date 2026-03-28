@@ -176,7 +176,12 @@ struct GroupsView: View {
             } else {
                 VStack(spacing: 8) {
                     ForEach(groupService.discoverGroups) { group in
-                        DiscoverGroupRowCard(group: group)
+                        NavigationLink {
+                            GroupDetailView(groupId: group.id)
+                        } label: {
+                            DiscoverGroupRowCard(group: group)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -280,15 +285,10 @@ struct MyGroupRowCard: View {
 
 struct DiscoverGroupRowCard: View {
     let group: APIGroup
-    @Environment(\.groupService) private var groupService
-    
-    @State private var isJoining = false
-    @State private var showingJoinError = false
-    @State private var joinErrorMessage: String?
     
     var body: some View {
         HStack(spacing: 12) {
-            // Group image placeholder
+            // Group image
             ZStack {
                 RoundedRectangle(cornerRadius: Constants.UI.cardRadius)
                     .fill(Color.appAccent.opacity(0.15))
@@ -314,10 +314,18 @@ struct DiscoverGroupRowCard: View {
             }
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(group.name)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(group.name)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    
+                    if group.isPrivate {
+                        Image(systemName: "lock.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 
                 HStack(spacing: 8) {
                     Text("\(group.memberCount) members")
@@ -325,7 +333,7 @@ struct DiscoverGroupRowCard: View {
                         .foregroundStyle(.secondary)
                     
                     if group.requiresApproval {
-                        Text("Approval required")
+                        Text("· Approval required")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -334,44 +342,14 @@ struct DiscoverGroupRowCard: View {
             
             Spacer()
             
-            // Join button
-            Group {
-                if isJoining {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                        .frame(width: 70, height: 32)
-                } else {
-                    Button {
-                        Task { await joinGroup() }
-                    } label: {
-                        Text(group.requiresApproval ? "Request to join" : "Join")
-                    }
-                    .pillButtonStyle(isSelected: false)
-                    .disabled(isJoining)
-                }
-            }
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
         }
         .appCardStyleCompact()
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(group.name), \(group.memberCount) members")
-        .accessibilityHint(group.requiresApproval ? "Tap to request to join" : "Tap to join group")
-        .alert("Couldn't join", isPresented: $showingJoinError) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(joinErrorMessage ?? "Something went wrong. Try again.")
-        }
-    }
-    
-    private func joinGroup() async {
-        isJoining = true
-        defer { isJoining = false }
-        
-        do {
-            try await groupService.joinGroup(id: group.id)
-        } catch {
-            joinErrorMessage = error.localizedDescription
-            showingJoinError = true
-        }
+        .accessibilityLabel("\(group.name), \(group.memberCount) members\(group.requiresApproval ? ", approval required" : "")")
+        .accessibilityHint("Tap to view group details")
     }
 }
 
