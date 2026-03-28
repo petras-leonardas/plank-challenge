@@ -619,20 +619,15 @@ struct CreateGroupView: View {
         createError = nil
         defer { isCreating = false }
         
-        let joinMode: APIJoinMode
-        if isPrivate {
-            joinMode = .inviteOnly
-        } else if requiresApproval {
-            joinMode = .approval
-        } else {
-            joinMode = .open
-        }
+        // Backend accepts: groupType = "public"|"private", joinMode = "open"|"request"
+        let groupType: APIGroupType = isPrivate ? .private : .public
+        let joinMode: APIJoinMode = (isPrivate || requiresApproval) ? .request : .open
         
         do {
             let newGroup = try await groupService.createGroup(
                 name: groupName.trimmingCharacters(in: .whitespaces),
                 description: groupDescription.isEmpty ? nil : groupDescription,
-                groupType: isPrivate ? .friends : .community,
+                groupType: groupType,
                 joinMode: joinMode
             )
             

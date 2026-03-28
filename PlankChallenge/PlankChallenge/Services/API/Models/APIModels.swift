@@ -634,17 +634,16 @@ struct NotificationsListResponse: Decodable {
 // MARK: - Group Models
 
 /// Group type
+/// Group type — raw values match backend z.enum(['public', 'private'])
 enum APIGroupType: String, Codable, Sendable {
-    case community
-    case friends
-    case workplace
+    case `public` = "public"
+    case `private` = "private"
 }
 
-/// Group join mode
+/// Group join mode — raw values match backend z.enum(['open', 'request'])
 enum APIJoinMode: String, Codable, Sendable {
-    case `open`
-    case approval
-    case inviteOnly = "invite_only"
+    case `open` = "open"
+    case request = "request"
 }
 
 /// Group model from API

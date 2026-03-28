@@ -252,7 +252,7 @@ final class GroupService: GroupServiceProtocol {
     func createGroup(
         name: String,
         description: String?,
-        groupType: APIGroupType = .community,
+        groupType: APIGroupType = .public,
         joinMode: APIJoinMode = .open
     ) async throws -> APIGroup {
         // Validate group name
