@@ -463,15 +463,20 @@ struct CompactLeaderboardRow: View {
     let entry: APILeaderboardEntry
     
     var body: some View {
-        LeaderboardRowView(
-            rank: entry.rank,
-            name: entry.user.displayName,
-            avatarText: String(entry.user.displayName.prefix(1)),
-            displayValue: entry.scoreLabel,
-            isCurrentUser: entry.isCurrentUser,
-            avatarImageName: nil,
-            size: .compact
-        )
+        NavigationLink {
+            UserProfileView(userId: entry.user.id)
+        } label: {
+            LeaderboardRowView(
+                rank: entry.rank,
+                name: entry.user.displayName,
+                avatarText: String(entry.user.displayName.prefix(1)),
+                displayValue: entry.scoreLabel,
+                isCurrentUser: entry.isCurrentUser,
+                avatarImageName: entry.user.profileImageUrl,
+                size: .compact
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 
