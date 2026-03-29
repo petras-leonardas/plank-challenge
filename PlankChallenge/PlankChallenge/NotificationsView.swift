@@ -15,6 +15,7 @@ struct NotificationsView: View {
     @State private var isLoadingMore = false
     @State private var joinRequestActionError: String?
     @State private var showingJoinRequestError = false
+    @State private var navigatingToUserId: String? = nil
     
     var body: some View {
         Group {
@@ -31,6 +32,9 @@ struct NotificationsView: View {
             }
         }
         .navigationTitle("Notifications")
+        .navigationDestination(for: String.self) { userId in
+            UserProfileView(userId: userId)
+        }
         .toolbar {
             if !notificationService.notifications.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -90,6 +94,14 @@ struct NotificationsView: View {
     }
     
     private func notificationRow(for notification: APINotification) -> some View {
+        // Determine if this notification taps through to a user profile.
+        // Both "follow" and "group_joined" carry relatedEntity { type: "user", id: userId }.
+        let navigateToUserId: String? = {
+            guard let entity = notification.relatedEntity, entity.type == "user" else { return nil }
+            guard notification.type == "follow" || notification.type == "group_joined" else { return nil }
+            return entity.id
+        }()
+        
         if notification.type == "group_join_request" {
             return AnyView(NotificationRow(
                 notification: notification,
@@ -97,6 +109,16 @@ struct NotificationsView: View {
                 onApprove: { await handleJoinRequest(notification: notification, approve: true) },
                 onDeny: { await handleJoinRequest(notification: notification, approve: false) }
             ))
+        } else if let userId = navigateToUserId {
+            return AnyView(NavigationLink(value: userId) {
+                NotificationRow(
+                    notification: notification,
+                    onTap: { await markAsRead(id: notification.id) }
+                )
+            }
+            .simultaneousGesture(TapGesture().onEnded {
+                Task { await markAsRead(id: notification.id) }
+            }))
         } else {
             return AnyView(NotificationRow(
                 notification: notification,
@@ -219,16 +241,38 @@ struct NotificationRow: View {
     
     @State private var isActioning = false
     
+    /// The person's name for avatar display, when this is a person-based notification.
+    /// The message is always structured as "{Name} <verb> …", so the first word is the name.
+    /// AvatarView uses the first letter of this string as the initials fallback.
+    private var personName: String? {
+        guard let entity = notification.relatedEntity, entity.type == "user" else { return nil }
+        switch notification.type {
+        case "follow", "group_joined", "group_join_request":
+            return notification.message.components(separatedBy: " ").first
+        default:
+            return nil
+        }
+    }
+    
     var body: some View {
         Button {
             Task { await onTap() }
         } label: {
             HStack(alignment: .top, spacing: 12) {
-                // Icon
-                Image(systemName: notification.iconName)
-                    .font(.title2)
-                    .foregroundStyle(iconColor)
-                    .frame(width: 32)
+                // Avatar for person-based notifications, icon for everything else
+                if let name = personName {
+                    AvatarView(
+                        text: name,
+                        imageName: Optional<String>.none,
+                        imageUrl: Optional<String>.none,
+                        size: 36
+                    )
+                } else {
+                    Image(systemName: notification.iconName)
+                        .font(.title2)
+                        .foregroundStyle(iconColor)
+                        .frame(width: 36)
+                }
                 
                 // Content
                 VStack(alignment: .leading, spacing: 4) {
