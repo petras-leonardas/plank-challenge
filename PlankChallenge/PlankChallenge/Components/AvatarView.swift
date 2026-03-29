@@ -66,21 +66,21 @@ struct AvatarView: View {
     var body: some View {
         Group {
             if let urlString = imageUrl, let url = URL(string: urlString) {
-                // Remote image via AsyncImage
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure, .empty:
-                        initialsView
-                    @unknown default:
-                        initialsView
+                // Remote image — cache-aware, shimmer while loading, initials on failure
+                CachedAvatarImage(
+                    url: url,
+                    size: size,
+                    onSuccess: { image in
+                        AnyView(
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        )
+                    },
+                    onFailure: {
+                        AnyView(initialsView)
                     }
-                }
-                .frame(width: size, height: size)
-                .clipShape(Circle())
+                )
             } else if let imageName = imageName, !imageName.isEmpty {
                 // Local asset
                 Image(imageName)

@@ -143,18 +143,9 @@ struct GroupDetailView: View {
                     .fill(Color.appAccent.opacity(0.2))
                     .frame(width: 80, height: 80)
                 
-                if let imageUrl = group.imageUrl {
-                    AsyncImage(url: URL(string: imageUrl)) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Image(systemName: "person.3.fill")
-                            .font(.largeTitle)
-                            .foregroundStyle(Color.appAccent)
-                    }
-                    .frame(width: 80, height: 80)
-                    .clipShape(Circle())
+                if let imageUrl = group.imageUrl, let url = URL(string: imageUrl) {
+                    // circle clip: use a large cornerRadius to approximate circle within CachedGroupImage
+                    CachedGroupImage(url: url, size: 80, cornerRadius: 40)
                 } else {
                     Image(systemName: "person.3.fill")
                         .font(.largeTitle)

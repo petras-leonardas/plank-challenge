@@ -228,18 +228,8 @@ struct MyGroupRowCard: View {
                     .fill(Color.appAccent.opacity(0.15))
                     .frame(width: 56, height: 56)
                 
-                if let imageUrl = group.imageUrl {
-                    AsyncImage(url: URL(string: imageUrl)) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Image(systemName: "person.3.fill")
-                            .font(.title3)
-                            .foregroundStyle(Color.appAccent)
-                    }
-                    .frame(width: 56, height: 56)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                if let imageUrl = group.imageUrl, let url = URL(string: imageUrl) {
+                    CachedGroupImage(url: url, size: 56, cornerRadius: 12)
                 } else {
                     Image(systemName: "person.3.fill")
                         .font(.title3)
@@ -292,18 +282,8 @@ struct DiscoverGroupRowCard: View {
                     .fill(Color.appAccent.opacity(0.15))
                     .frame(width: 56, height: 56)
                 
-                if let imageUrl = group.imageUrl {
-                    AsyncImage(url: URL(string: imageUrl)) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Image(systemName: "person.3.fill")
-                            .font(.title3)
-                            .foregroundStyle(Color.appAccent)
-                    }
-                    .frame(width: 56, height: 56)
-                    .clipShape(RoundedRectangle(cornerRadius: Constants.UI.cardRadius))
+                if let imageUrl = group.imageUrl, let url = URL(string: imageUrl) {
+                    CachedGroupImage(url: url, size: 56, cornerRadius: Constants.UI.cardRadius)
                 } else {
                     Image(systemName: "person.3.fill")
                         .font(.title3)
