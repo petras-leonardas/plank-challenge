@@ -32,8 +32,13 @@ struct NotificationsView: View {
             }
         }
         .navigationTitle("Notifications")
-        .navigationDestination(for: String.self) { userId in
-            UserProfileView(userId: userId)
+        .navigationDestination(isPresented: Binding(
+            get: { navigatingToUserId != nil },
+            set: { if !$0 { navigatingToUserId = nil } }
+        )) {
+            if let userId = navigatingToUserId {
+                UserProfileView(userId: userId)
+            }
         }
         .toolbar {
             if !notificationService.notifications.isEmpty {
@@ -110,15 +115,13 @@ struct NotificationsView: View {
                 onDeny: { await handleJoinRequest(notification: notification, approve: false) }
             ))
         } else if let userId = navigateToUserId {
-            return AnyView(NavigationLink(value: userId) {
-                NotificationRow(
-                    notification: notification,
-                    onTap: { await markAsRead(id: notification.id) }
-                )
-            }
-            .simultaneousGesture(TapGesture().onEnded {
-                Task { await markAsRead(id: notification.id) }
-            }))
+            return AnyView(NotificationRow(
+                notification: notification,
+                onTap: {
+                    await markAsRead(id: notification.id)
+                    navigatingToUserId = userId
+                }
+            ))
         } else {
             return AnyView(NotificationRow(
                 notification: notification,
