@@ -139,11 +139,13 @@ struct PlankTimerView: View {
             let maxButtonSize = expandedButtonSize(for: geometry.size.width)
             
             // Calculate true screen center accounting for safe areas
-            // This prevents the button from shifting when tab bar hides/shows
+            // This prevents the button from shifting when tab bar hides/shows.
+            // Offset upward by 40pt so the button sits higher, giving the mode
+            // selector and wheel picker room to breathe below it.
             let safeAreaTop = geometry.safeAreaInsets.top
             let safeAreaBottom = geometry.safeAreaInsets.bottom
             let fullHeight = geometry.size.height + safeAreaTop + safeAreaBottom
-            let centerY = fullHeight / 2 - safeAreaTop
+            let centerY = fullHeight / 2 - safeAreaTop - 40
             
             ZStack {
                 // Full screen gradient background — animates between phase colors
