@@ -69,6 +69,7 @@ struct PlankTimerView: View {
     @State private var currentBottomColor: Color = Color.plankPhaseBottomColors[0]
     @State private var currentGlowColor: Color = Color.plankPhaseGlowColors[0]
     @State private var gradientCycleTimer: Timer?
+    @State private var gradientTask: Task<Void, Never>?
     
     // Goal duration stored locally and synced to backend
     @AppStorage("plankGoalSeconds") private var storedGoalSeconds: Int = 60
@@ -234,9 +235,13 @@ struct PlankTimerView: View {
         }
         .onAppear {
             checkForNewDayOrExistingPlanks()
-            // Seed wheel picker from stored goal, snapping seconds to nearest 5-second step
+            // Seed wheel picker from stored goal
             selectedMinutes = storedGoalSeconds / 60
-            selectedSeconds = ((storedGoalSeconds % 60) / 5) * 5
+            selectedSeconds = storedGoalSeconds % 60
+            startGradientCycle()
+        }
+        .onDisappear {
+            cleanup()
         }
         .onDisappear {
             cleanup()
@@ -532,7 +537,7 @@ struct PlankTimerView: View {
                     } else {
                         // Static outer glow ring
                         Circle()
-                            .stroke(Color.plankButtonGlow.opacity(0.3), lineWidth: 2)
+                            .stroke(currentGlowColor.opacity(0.3), lineWidth: 2)
                             .frame(width: baseButtonSize + 30, height: baseButtonSize + 30)
                     }
                     
@@ -540,7 +545,7 @@ struct PlankTimerView: View {
                     Circle()
                         .fill(
                             RadialGradient(
-                                colors: [Color.plankButtonInner, Color.plankButtonGlow],
+                                colors: [currentGlowColor, currentGlowColor.opacity(0.7)],
                                 center: .center,
                                 startRadius: 0,
                                 endRadius: baseButtonSize / 2
@@ -555,7 +560,7 @@ struct PlankTimerView: View {
                 buttonContent(for: size)
             }
             .animation(.easeInOut(duration: 0.5), value: scale)
-            .pulsingGlow(color: Color.plankButtonGlow, isAnimating: timerState == .ready)
+            .pulsingGlow(color: currentGlowColor, isAnimating: timerState == .ready)
         }
         .buttonStyle(PlankButtonStyle())
         .scaleEffect(buttonScale)
@@ -1018,7 +1023,38 @@ struct PlankTimerView: View {
         saveTask = nil
         goalSyncTask?.cancel()
         goalSyncTask = nil
+        gradientCycleTimer?.invalidate()
+        gradientCycleTimer = nil
+        gradientTask?.cancel()
+        gradientTask = nil
         timerService.stop()
+    }
+    
+    // MARK: - Shifting Background Gradient
+    
+    /// Starts an async loop that steps through gradient phases.
+    /// Each phase = 10s hold, then a 30s animated transition, then repeat.
+    /// Uses Task + sleep so there are no Timer closure capture issues with structs.
+    private func startGradientCycle() {
+        gradientTask?.cancel()
+        gradientTask = Task { @MainActor in
+            do {
+                // Initial hold before the first transition
+                try await Task.sleep(nanoseconds: 10_000_000_000) // 10s
+                while !Task.isCancelled {
+                    // Advance to the next phase with a 30s animation
+                    gradientPhase = (gradientPhase + 1) % Color.plankPhaseBottomColors.count
+                    withAnimation(.linear(duration: 30)) {
+                        currentBottomColor = Color.plankPhaseBottomColors[gradientPhase]
+                        currentGlowColor = Color.plankPhaseGlowColors[gradientPhase]
+                    }
+                    // Wait for the transition (30s) + next hold (10s) = 40s before next advance
+                    try await Task.sleep(nanoseconds: 40_000_000_000)
+                }
+            } catch {
+                // Task cancelled — normal on .onDisappear/cleanup, nothing to do
+            }
+        }
     }
 }
 

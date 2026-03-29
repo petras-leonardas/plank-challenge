@@ -90,17 +90,41 @@ extension Color {
     
     // MARK: - Plank Screen Colors (Shazam-inspired)
     
-    /// Plank gradient start (deep dark blue)
+    /// Plank gradient start (deep dark blue) — fixed top color, never changes
     static let plankGradientStart = Color(red: 10/255, green: 22/255, blue: 40/255)
     
-    /// Plank gradient end (electric blue)
+    /// Plank gradient end (electric blue) — phase 0 bottom color
     static let plankGradientEnd = Color(red: 0/255, green: 102/255, blue: 255/255)
     
-    /// Plank button glow color
+    /// Plank button glow color — phase 0 glow
     static let plankButtonGlow = Color(red: 0/255, green: 150/255, blue: 255/255)
     
-    /// Plank button inner color
+    /// Plank button inner color — phase 0 inner
     static let plankButtonInner = Color(red: 30/255, green: 120/255, blue: 255/255)
+    
+    // MARK: - Plank Gradient Phase Palette
+    // 6 phases cycling through blue-family hues. Top color is always plankGradientStart.
+    // Each phase has a bottom gradient color and a matching button glow color (lighter/brighter).
+    
+    /// Bottom gradient colors for each phase (top is always plankGradientStart)
+    static let plankPhaseBottomColors: [Color] = [
+        Color(red:   0/255, green: 102/255, blue: 255/255), // Phase 0: Electric blue  #0066FF
+        Color(red:  43/255, green:   0/255, blue: 255/255), // Phase 1: Royal indigo   #2B00FF
+        Color(red:  68/255, green:  34/255, blue: 204/255), // Phase 2: Cobalt violet  #4422CC
+        Color(red:   0/255, green:  51/255, blue: 128/255), // Phase 3: Deep sapphire  #003380
+        Color(red:   0/255, green: 102/255, blue: 153/255), // Phase 4: Ocean teal     #006699
+        Color(red:   0/255, green: 153/255, blue: 204/255), // Phase 5: Cyan-teal      #0099CC
+    ]
+    
+    /// Button glow colors for each phase — lighter/brighter version tracking the bottom hue
+    static let plankPhaseGlowColors: [Color] = [
+        Color(red:   0/255, green: 150/255, blue: 255/255), // Phase 0: Sky blue       #0096FF
+        Color(red: 102/255, green:  68/255, blue: 255/255), // Phase 1: Light indigo   #6644FF
+        Color(red: 119/255, green:  85/255, blue: 255/255), // Phase 2: Soft violet    #7755FF
+        Color(red:  30/255, green: 120/255, blue: 255/255), // Phase 3: Mid blue       #1E78FF
+        Color(red:   0/255, green: 170/255, blue: 204/255), // Phase 4: Bright teal    #00AACC
+        Color(red:  51/255, green: 187/255, blue: 238/255), // Phase 5: Light cyan     #33BBEE
+    ]
     
     /// Completed button glow color (green)
     static let completedButtonGlow = Color(red: 50/255, green: 200/255, blue: 120/255)
