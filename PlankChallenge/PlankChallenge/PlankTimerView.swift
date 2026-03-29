@@ -64,11 +64,9 @@ struct PlankTimerView: View {
     @State private var timerMode: TimerMode = .free
     
     // MARK: - Shifting background gradient
-    // Cycles through Color.plankPhaseBottomColors every 40s (10s hold + 30s transition).
-    @State private var gradientPhase: Int = 0
+    // Continuously cycles through Color.plankPhaseBottomColors, 30s per transition.
     @State private var currentBottomColor: Color = Color.plankPhaseBottomColors[0]
     @State private var currentGlowColor: Color = Color.plankPhaseGlowColors[0]
-    @State private var gradientCycleTimer: Timer?
     @State private var gradientTask: Task<Void, Never>?
     
     // Goal duration stored locally and synced to backend
@@ -1023,8 +1021,6 @@ struct PlankTimerView: View {
         saveTask = nil
         goalSyncTask?.cancel()
         goalSyncTask = nil
-        gradientCycleTimer?.invalidate()
-        gradientCycleTimer = nil
         gradientTask?.cancel()
         gradientTask = nil
         timerService.stop()
@@ -1032,27 +1028,32 @@ struct PlankTimerView: View {
     
     // MARK: - Shifting Background Gradient
     
-    /// Starts an async loop that steps through gradient phases.
-    /// Each phase = 10s hold, then a 30s animated transition, then repeat.
-    /// Uses Task + sleep so there are no Timer closure capture issues with structs.
+    /// Starts a continuous async loop that steps through gradient phases.
+    /// No hold period — transitions fire back-to-back, each taking 30s.
+    /// Phase index is tracked locally inside the Task (not via @State) to avoid
+    /// the SwiftUI struct-copy mutation trap.
     private func startGradientCycle() {
         gradientTask?.cancel()
-        gradientTask = Task { @MainActor in
+        gradientTask = Task {
+            var phase = 0
             do {
-                // Initial hold before the first transition
-                try await Task.sleep(nanoseconds: 10_000_000_000) // 10s
                 while !Task.isCancelled {
-                    // Advance to the next phase with a 30s animation
-                    gradientPhase = (gradientPhase + 1) % Color.plankPhaseBottomColors.count
-                    withAnimation(.linear(duration: 30)) {
-                        currentBottomColor = Color.plankPhaseBottomColors[gradientPhase]
-                        currentGlowColor = Color.plankPhaseGlowColors[gradientPhase]
+                    // Advance to the next phase
+                    phase = (phase + 1) % Color.plankPhaseBottomColors.count
+                    let nextBottom = Color.plankPhaseBottomColors[phase]
+                    let nextGlow = Color.plankPhaseGlowColors[phase]
+                    // Animate the color change on the main actor
+                    await MainActor.run {
+                        withAnimation(.linear(duration: 30)) {
+                            currentBottomColor = nextBottom
+                            currentGlowColor = nextGlow
+                        }
                     }
-                    // Wait for the transition (30s) + next hold (10s) = 40s before next advance
-                    try await Task.sleep(nanoseconds: 40_000_000_000)
+                    // Wait exactly 30s before starting the next transition
+                    try await Task.sleep(nanoseconds: 30_000_000_000)
                 }
             } catch {
-                // Task cancelled — normal on .onDisappear/cleanup, nothing to do
+                // Task cancelled on cleanup — nothing to do
             }
         }
     }
