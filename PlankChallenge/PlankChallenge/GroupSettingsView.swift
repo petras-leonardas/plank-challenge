@@ -31,6 +31,10 @@ struct GroupSettingsView: View {
     @State private var joinRequestActionError: String?
     @State private var showingJoinRequestError = false
     @State private var isLoadingRequests = false
+    @State private var loadRequestsError: String?
+    @State private var showingLoadRequestsError = false
+    /// IDs of requests currently being approved or denied — prevents double-taps.
+    @State private var actioningRequestIds: Set<String> = []
     
     var body: some View {
         NavigationStack {
@@ -100,6 +104,12 @@ struct GroupSettingsView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(joinRequestActionError ?? "Something went wrong. Try again.")
+        }
+        .alert("Couldn't load requests", isPresented: $showingLoadRequestsError) {
+            Button("Retry") { Task { await loadJoinRequests() } }
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(loadRequestsError ?? "The pending requests couldn't be loaded. Try again.")
         }
         .onAppear {
             // Initialize form when view appears (works even if group already loaded)
@@ -310,26 +320,35 @@ struct GroupSettingsView: View {
             
             Spacer()
             
+            let isActioning = actioningRequestIds.contains(request.id)
             HStack(spacing: 8) {
-                Button {
-                    Task { await handleRequest(request, approve: true) }
-                } label: {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.successColor)
-                        .font(.title2)
+                if isActioning {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                        .frame(width: 44, height: 44)
+                } else {
+                    Button {
+                        actioningRequestIds.insert(request.id)
+                        Task { await handleRequest(request, approve: true) }
+                    } label: {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(Color.successColor)
+                            .font(.title2)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Approve \(request.user?.displayName ?? "request")")
+
+                    Button {
+                        actioningRequestIds.insert(request.id)
+                        Task { await handleRequest(request, approve: false) }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(Color.errorColor)
+                            .font(.title2)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Deny \(request.user?.displayName ?? "request")")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Approve \(request.user?.displayName ?? "request")")
-                
-                Button {
-                    Task { await handleRequest(request, approve: false) }
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(Color.errorColor)
-                        .font(.title2)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Deny \(request.user?.displayName ?? "request")")
             }
         }
         .padding(.vertical, 2)
@@ -422,15 +441,18 @@ struct GroupSettingsView: View {
     
     private func loadJoinRequests() async {
         isLoadingRequests = true
+        loadRequestsError = nil
         defer { isLoadingRequests = false }
         do {
             try await groupService.fetchJoinRequests(groupId: groupId)
         } catch {
-            // Non-critical — silently fail, section stays hidden if empty
+            loadRequestsError = error.localizedDescription
+            showingLoadRequestsError = true
         }
     }
     
     private func handleRequest(_ request: APIJoinRequest, approve: Bool) async {
+        defer { actioningRequestIds.remove(request.id) }
         do {
             if approve {
                 try await groupService.approveJoinRequest(groupId: groupId, requestId: request.id)
