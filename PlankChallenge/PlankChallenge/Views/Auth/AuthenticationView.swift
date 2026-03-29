@@ -51,10 +51,17 @@ struct AuthenticationView: View {
         .onChange(of: errorMessage) { _, newValue in
             showError = newValue != nil
         }
+        .sheet(isPresented: $showEmailSignIn) {
+            EmailSignInView()
+        }
+        .sheet(isPresented: $showEmailSignUp) {
+            EmailSignUpView()
+        }
         .overlay {
             // Show loading overlay during Apple Sign In or backend token exchange.
             // Google's OAuth sheet manages its own UI — we only show this after it dismisses.
-            if isSigningInWithApple || authService.isLoading {
+            // Email sheets manage their own loading state — exclude them to avoid covering the form.
+            if (isSigningInWithApple || authService.isLoading) && !showEmailSignIn && !showEmailSignUp {
                 ZStack {
                     Color.overlayScrim
                         .ignoresSafeArea()
@@ -149,9 +156,6 @@ struct AuthenticationView: View {
             .disabled(isSigningInWithApple || authService.isLoading)
         }
         .padding(.horizontal, 24)
-        .sheet(isPresented: $showEmailSignIn) {
-            EmailSignInView()
-        }
     }
     
     // MARK: - Sign Up Section
@@ -174,9 +178,6 @@ struct AuthenticationView: View {
         }
         .padding(.horizontal, 32)
         .padding(.top, 24)
-        .sheet(isPresented: $showEmailSignUp) {
-            EmailSignUpView()
-        }
     }
     
     // MARK: - Google Sign In Handler
