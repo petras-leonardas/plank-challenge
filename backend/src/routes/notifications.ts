@@ -25,7 +25,7 @@ const listNotificationsSchema = z.object({
 // HELPER FUNCTIONS
 // ============================================
 
-function formatNotification(notification: NotificationRecord): FormattedNotification {
+function formatNotification(notification: NotificationRecord & { live_actor_image_url?: string | null }): FormattedNotification {
   return {
     id: notification.id,
     type: notification.type,
@@ -38,7 +38,8 @@ function formatNotification(notification: NotificationRecord): FormattedNotifica
             id: notification.related_entity_id,
           }
         : null,
-    actorImageUrl: notification.actor_image_url ?? null,
+    // Prefer the live image from the JOIN (always current), fall back to stored value
+    actorImageUrl: notification.live_actor_image_url ?? notification.actor_image_url ?? null,
     isRead: notification.is_read === 1,
     createdAt: notification.created_at,
   };
@@ -74,11 +75,16 @@ notifications.get('/', zValidator('query', listNotificationsSchema), async (c) =
     });
   }
 
-  // Build query
+  // Build query — LEFT JOIN users to get the actor's current profile image
+  // (stored actor_image_url can go stale if the user changes their avatar)
   let query = `
-    SELECT id, user_id, type, title, message, related_entity_type, related_entity_id, actor_image_url, is_read, created_at
-    FROM notifications
-    WHERE user_id = ?
+    SELECT n.id, n.user_id, n.type, n.title, n.message,
+           n.related_entity_type, n.related_entity_id, n.actor_image_url,
+           u.profile_image_url AS live_actor_image_url,
+           n.is_read, n.created_at
+    FROM notifications n
+    LEFT JOIN users u ON n.related_entity_type = 'user' AND n.related_entity_id = u.id
+    WHERE n.user_id = ?
   `;
   const params: (string | number)[] = [userId];
 
@@ -155,12 +161,16 @@ notifications.get('/:id', async (c) => {
 
   const notification = await db
     .prepare(`
-      SELECT id, user_id, type, title, message, related_entity_type, related_entity_id, actor_image_url, is_read, created_at
-      FROM notifications
-      WHERE id = ? AND user_id = ?
+      SELECT n.id, n.user_id, n.type, n.title, n.message,
+             n.related_entity_type, n.related_entity_id, n.actor_image_url,
+             u.profile_image_url AS live_actor_image_url,
+             n.is_read, n.created_at
+      FROM notifications n
+      LEFT JOIN users u ON n.related_entity_type = 'user' AND n.related_entity_id = u.id
+      WHERE n.id = ? AND n.user_id = ?
     `)
     .bind(notificationId, userId)
-    .first<NotificationRecord>();
+    .first<NotificationRecord & { live_actor_image_url?: string | null }>();
 
   if (!notification) {
     return errors.notFound(c, 'Notification');
