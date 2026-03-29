@@ -160,11 +160,15 @@ struct NotificationsView: View {
     }
     
     private var emptyState: some View {
-        EmptyStateView(
-            icon: "bell.slash",
-            title: "You're all caught up",
-            message: "Nothing new right now"
-        )
+        // Wrapped in a ScrollView so .refreshable works — without a scroll
+        // container the pull-to-refresh gesture has nowhere to attach.
+        ScrollView {
+            EmptyStateView(
+                icon: "bell.slash",
+                title: "You're all caught up",
+                message: "Nothing new right now"
+            )
+        }
     }
     
     // MARK: - Actions
