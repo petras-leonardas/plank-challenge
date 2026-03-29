@@ -10,8 +10,8 @@ import SwiftUI
 // MARK: - Timer Mode
 
 enum TimerMode: String, CaseIterable {
-    case free = "Free"
-    case goal = "Goal"
+    case free = "Stopwatch"
+    case goal = "Countdown"
 }
 
 // MARK: - Plank Timer State Machine
@@ -176,10 +176,13 @@ struct PlankTimerView: View {
                 instructionText
                     .position(x: geometry.size.width / 2, y: centerY - (maxButtonSize / 2) - 50)
                 
-                // Mode selector + goal input — positioned below the button, only in .ready
+                // Mode selector + goal input — positioned below the button, only in .ready.
+                // .transition(.opacity) is required: without it SwiftUI does not animate
+                // conditional insertion/removal of absolutely-positioned views in a ZStack.
                 if timerState == .ready {
                     timerModeSelector
                         .position(x: geometry.size.width / 2, y: centerY + (baseButtonSize / 2) + 52)
+                        .transition(.opacity)
                 }
                 
                 // Top bar overlay - fixed at top
