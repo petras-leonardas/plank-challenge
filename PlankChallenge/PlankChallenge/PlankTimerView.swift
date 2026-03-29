@@ -1149,7 +1149,8 @@ struct AnimatedFlameIcon: View {
 
 // MARK: - Motivational Ticker
 
-/// Cycles through motivational one-liners with a slow fade-in → hold → fade-out rhythm.
+/// Cycles through motivational one-liners with a combined scale + blur + fade transition.
+/// Breathes in (grows from small+blurry → full+sharp) and breathes out (shrinks+blurs back).
 /// Entirely self-contained — no external data, no network calls.
 struct MotivationalTickerView: View {
     
@@ -1167,12 +1168,15 @@ struct MotivationalTickerView: View {
     ]
     
     // Timing constants
-    private let fadeIn: Double   = 1.5
-    private let hold: Double     = 4.0
-    private let fadeOut: Double  = 1.5
+    private let fadeIn: Double  = 1.5
+    private let hold: Double    = 4.0
+    private let fadeOut: Double = 1.5
     
+    // Transition state — all three animate together as one gesture
     @State private var currentIndex: Int = Int.random(in: 0..<10)
     @State private var opacity: Double = 0
+    @State private var scale: CGFloat  = 0.88
+    @State private var blur: Double    = 6
     @State private var cycleTask: Task<Void, Never>?
     
     var body: some View {
@@ -1182,6 +1186,8 @@ struct MotivationalTickerView: View {
             .foregroundStyle(.white.opacity(0.65))
             .multilineTextAlignment(.center)
             .opacity(opacity)
+            .scaleEffect(scale)
+            .blur(radius: blur)
             .onAppear { startCycle() }
             .onDisappear {
                 cycleTask?.cancel()
@@ -1194,22 +1200,30 @@ struct MotivationalTickerView: View {
         cycleTask = Task {
             do {
                 while !Task.isCancelled {
-                    // Fade in
+                    // Breathe in — opacity, scale, and blur all animate together
                     await MainActor.run {
-                        withAnimation(.easeIn(duration: fadeIn)) { opacity = 1 }
+                        withAnimation(.easeOut(duration: fadeIn)) {
+                            opacity = 1
+                            scale   = 1.0
+                            blur    = 0
+                        }
                     }
                     try await Task.sleep(nanoseconds: UInt64(fadeIn * 1_000_000_000))
                     
-                    // Hold
+                    // Hold — fully present, crisp, full size
                     try await Task.sleep(nanoseconds: UInt64(hold * 1_000_000_000))
                     
-                    // Fade out
+                    // Breathe out — reverse all three together
                     await MainActor.run {
-                        withAnimation(.easeOut(duration: fadeOut)) { opacity = 0 }
+                        withAnimation(.easeIn(duration: fadeOut)) {
+                            opacity = 0
+                            scale   = 0.88
+                            blur    = 6
+                        }
                     }
                     try await Task.sleep(nanoseconds: UInt64(fadeOut * 1_000_000_000))
                     
-                    // Advance to next line (invisible while opacity is 0)
+                    // Advance to next line while invisible
                     await MainActor.run {
                         currentIndex = (currentIndex + 1) % Self.lines.count
                     }
