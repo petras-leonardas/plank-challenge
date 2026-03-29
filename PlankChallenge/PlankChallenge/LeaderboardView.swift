@@ -21,6 +21,40 @@ enum LeaderboardTab: String, CaseIterable {
     }
 }
 
+// MARK: - Ranked Group (view-layer grouping of tied entries)
+
+/// A single rank position that may contain one or more users with identical scores.
+struct RankedGroup: Identifiable {
+    let rank: Int
+    let scoreLabel: String
+    let entries: [APILeaderboardEntry]
+    let containsCurrentUser: Bool
+
+    var id: Int { rank }
+}
+
+/// Groups a flat sorted entry list by rank number, producing one `RankedGroup` per
+/// distinct rank. Call this after the backend returns DENSE_RANK-assigned entries.
+func groupByRank(_ entries: [APILeaderboardEntry]) -> [RankedGroup] {
+    var groups: [RankedGroup] = []
+    var i = 0
+    while i < entries.count {
+        let currentRank = entries[i].rank
+        var group: [APILeaderboardEntry] = []
+        while i < entries.count && entries[i].rank == currentRank {
+            group.append(entries[i])
+            i += 1
+        }
+        groups.append(RankedGroup(
+            rank: currentRank,
+            scoreLabel: group[0].scoreLabel,
+            entries: group,
+            containsCurrentUser: group.contains(where: { $0.isCurrentUser })
+        ))
+    }
+    return groups
+}
+
 // MARK: - Standalone Leaderboard View (for backwards compatibility)
 
 struct LeaderboardView: View {
@@ -42,15 +76,12 @@ struct RankingsContent: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                // Streak card
                 leaderboardCard(
                     title: "STREAK",
                     entries: leaderboardService.globalLeaderboard,
                     userRank: leaderboardService.userGlobalRank,
                     tab: .streak
                 )
-
-                // Longest Plank card
                 leaderboardCard(
                     title: "LONGEST PLANK",
                     entries: leaderboardService.globalLeaderboardLongestPlank,
@@ -92,7 +123,6 @@ struct RankingsContent: View {
         tab: LeaderboardTab
     ) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header row with See All
             HStack {
                 Text(title)
                     .font(.caption)
@@ -125,16 +155,19 @@ struct RankingsContent: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 16)
             } else {
+                // Show top 5 entries grouped by rank (ties share a row)
                 let top5 = Array(entries.prefix(5))
+                let groups = groupByRank(top5)
+
                 VStack(spacing: 0) {
-                    ForEach(Array(top5.enumerated()), id: \.element.id) { index, entry in
-                        APILeaderboardRow(entry: entry)
-                        if index < top5.count - 1 {
+                    ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
+                        TiedLeaderboardRow(group: group)
+                        if index < groups.count - 1 {
                             Divider().padding(.horizontal)
                         }
                     }
 
-                    // Pin current user's row if they fall outside the top 5
+                    // Pin current user if they fall outside the top 5
                     if let rank = userRank, rank.rank > 5 {
                         Divider().padding(.horizontal)
                         HStack {
@@ -161,7 +194,6 @@ struct RankingsContent: View {
         do {
             try await leaderboardService.fetchGlobalLeaderboardBoth(limit: 5)
         } catch is CancellationError {
-            // Task cancelled — not a user-visible error
         } catch {
             errorMessage = error.localizedDescription
             showingError = true
@@ -206,22 +238,32 @@ struct FullLeaderboardListView: View {
                         message: "Complete planks to appear on the leaderboard"
                     )
                 } else {
+                    let groups = groupByRank(entries)
                     ScrollView {
                         LazyVStack(spacing: 0) {
-                            ForEach(entries) { entry in
-                                NavigationLink {
-                                    UserProfileView(userId: entry.user.id)
-                                } label: {
-                                    APILeaderboardRow(entry: entry)
+                            ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
+                                if group.entries.count == 1 {
+                                    NavigationLink {
+                                        UserProfileView(userId: group.entries[0].user.id)
+                                    } label: {
+                                        APILeaderboardRow(entry: group.entries[0])
+                                    }
+                                    .buttonStyle(.plain)
+                                } else {
+                                    NavigationLink {
+                                        TiedUsersListView(group: group)
+                                    } label: {
+                                        TiedLeaderboardRow(group: group)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                .buttonStyle(.plain)
 
-                                if entry.id != entries.last?.id {
+                                if index < groups.count - 1 {
                                     Divider().padding(.horizontal)
                                 }
                             }
 
-                            // Pin current user's rank if outside the loaded window
+                            // Pin current user if outside the loaded window
                             if let rank = userRank,
                                !entries.contains(where: { $0.id == rank.id }) {
                                 Divider().padding(.vertical, 8)
@@ -265,15 +307,155 @@ struct FullLeaderboardListView: View {
 
     private func loadFull() async {
         do {
-            // fetchGlobalLeaderboardBoth fetches both streak and longest-plank
-            // in parallel and stores them in their respective service properties,
-            // so both full lists stay consistent regardless of which tab is open.
             try await leaderboardService.fetchGlobalLeaderboardBoth(limit: 100)
         } catch is CancellationError { }
         catch {
             errorMessage = error.localizedDescription
             showingError = true
         }
+    }
+}
+
+// MARK: - Tied Leaderboard Row
+
+/// A leaderboard row for a rank position shared by two or more users.
+/// Shows overlapping avatars + the shared score. Tapping navigates to TiedUsersListView.
+struct TiedLeaderboardRow: View {
+    let group: RankedGroup
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Rank number
+            Text("#\(group.rank)")
+                .font(.headline)
+                .foregroundStyle(rankColor)
+                .frame(width: 40)
+
+            if group.entries.count == 1 {
+                // Single entry — render standard avatar
+                AvatarView.accent(
+                    name: group.entries[0].user.displayName,
+                    imageUrl: group.entries[0].user.profileImageUrl,
+                    size: Constants.UI.avatarMedium
+                )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(group.entries[0].user.displayName)
+                        .font(.body)
+                        .fontWeight(group.containsCurrentUser ? .semibold : .medium)
+                    if let username = group.entries[0].user.username {
+                        Text("@\(username)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                // Multiple tied users — overlapping avatar stack
+                TiedAvatarStack(entries: group.entries)
+
+                Text("\(group.entries.count) tied")
+                    .font(.body)
+                    .fontWeight(group.containsCurrentUser ? .semibold : .medium)
+                    .foregroundStyle(.primary)
+            }
+
+            Spacer()
+
+            Text(group.scoreLabel)
+                .font(.headline)
+                .foregroundStyle(Color.appAccent)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(group.containsCurrentUser ? Color.appAccent.opacity(0.08) : Color.clear)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            group.entries.count == 1
+                ? "Rank \(group.rank), \(group.entries[0].user.displayName), \(group.scoreLabel)"
+                : "Rank \(group.rank), \(group.entries.count) tied users, \(group.scoreLabel)"
+        )
+    }
+
+    private var rankColor: Color {
+        switch group.rank {
+        case 1: return Color.rankGold
+        case 2: return Color.rankSilver
+        case 3: return Color.rankBronze
+        default: return Color.secondary
+        }
+    }
+}
+
+// MARK: - Tied Avatar Stack
+
+/// Shows up to 3 overlapping avatars with a "+N" overflow circle.
+struct TiedAvatarStack: View {
+    let entries: [APILeaderboardEntry]
+    var size: CGFloat = 36
+
+    private var visible: [APILeaderboardEntry] { Array(entries.prefix(3)) }
+    private var overflow: Int { max(0, entries.count - 3) }
+
+    var body: some View {
+        HStack(spacing: -(size * 0.3)) {
+            ForEach(Array(visible.enumerated()), id: \.element.id) { index, entry in
+                AvatarView.accent(
+                    name: entry.user.displayName,
+                    imageUrl: entry.user.profileImageUrl,
+                    size: size
+                )
+                .overlay(
+                    Circle().stroke(Color.warmWhiteCard, lineWidth: 2)
+                )
+                .zIndex(Double(visible.count - index))
+            }
+
+            if overflow > 0 {
+                ZStack {
+                    Circle()
+                        .fill(Color.appAccent.opacity(0.15))
+                        .frame(width: size, height: size)
+                    Text("+\(overflow)")
+                        .font(.system(size: size * 0.35, weight: .semibold))
+                        .foregroundStyle(Color.appAccent)
+                }
+                .overlay(Circle().stroke(Color.warmWhiteCard, lineWidth: 2))
+            }
+        }
+    }
+}
+
+// MARK: - Tied Users List View (push destination)
+
+/// Full list of users sharing a particular rank, each tappable to their profile.
+struct TiedUsersListView: View {
+    let group: RankedGroup
+
+    var body: some View {
+        ZStack {
+            AppBackground()
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(Array(group.entries.enumerated()), id: \.element.id) { index, entry in
+                        NavigationLink {
+                            UserProfileView(userId: entry.user.id)
+                        } label: {
+                            APILeaderboardRow(entry: entry)
+                        }
+                        .buttonStyle(.plain)
+
+                        if index < group.entries.count - 1 {
+                            Divider().padding(.horizontal)
+                        }
+                    }
+                }
+                .padding(.vertical)
+            }
+        }
+        .navigationTitle("Rank #\(group.rank)")
+        .navigationBarTitleDisplayMode(.inline)
+        .appNavigationBarStyle()
     }
 }
 
@@ -319,31 +501,28 @@ struct RankingsCardSkeleton: View {
     }
 }
 
-// MARK: - API Leaderboard Row
+// MARK: - API Leaderboard Row (single entry)
 
 struct APILeaderboardRow: View {
     let entry: APILeaderboardEntry
 
     var body: some View {
         HStack(spacing: 12) {
-            // Rank
             Text("#\(entry.rank)")
                 .font(.headline)
                 .foregroundStyle(rankColor)
                 .frame(width: 40)
 
-            // Avatar
             AvatarView.accent(
                 name: entry.user.displayName,
                 imageUrl: entry.user.profileImageUrl,
                 size: Constants.UI.avatarMedium
             )
 
-            // Name
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.user.displayName)
                     .font(.body)
-                    .fontWeight(.medium)
+                    .fontWeight(entry.isCurrentUser ? .semibold : .medium)
 
                 if let username = entry.user.username {
                     Text("@\(username)")
@@ -354,13 +533,13 @@ struct APILeaderboardRow: View {
 
             Spacer()
 
-            // Score
             Text(entry.scoreLabel)
                 .font(.headline)
                 .foregroundStyle(Color.appAccent)
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
+        .background(entry.isCurrentUser ? Color.appAccent.opacity(0.08) : Color.clear)
     }
 
     private var rankColor: Color {

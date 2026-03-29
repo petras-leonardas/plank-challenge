@@ -7,6 +7,105 @@
 
 import SwiftUI
 
+// MARK: - Group Ranked Group (view-layer tie grouping for group leaderboards)
+
+struct GroupRankedGroup: Identifiable {
+    let rank: Int
+    let entries: [GroupLeaderboardEntry]
+    let containsCurrentUser: Bool
+    var id: Int { rank }
+}
+
+func groupGroupsByRank(
+    _ entries: [GroupLeaderboardEntry],
+    currentUserId: String?
+) -> [GroupRankedGroup] {
+    var groups: [GroupRankedGroup] = []
+    var i = 0
+    while i < entries.count {
+        let currentRank = entries[i].rank
+        var group: [GroupLeaderboardEntry] = []
+        while i < entries.count && entries[i].rank == currentRank {
+            group.append(entries[i])
+            i += 1
+        }
+        groups.append(GroupRankedGroup(
+            rank: currentRank,
+            entries: group,
+            containsCurrentUser: group.contains(where: { $0.user.id == currentUserId })
+        ))
+    }
+    return groups
+}
+
+// MARK: - Group Tied Avatar Stack
+
+struct GroupTiedAvatarStack: View {
+    let entries: [GroupLeaderboardEntry]
+    var size: CGFloat = 32
+
+    private var visible: [GroupLeaderboardEntry] { Array(entries.prefix(3)) }
+    private var overflow: Int { max(0, entries.count - 3) }
+
+    var body: some View {
+        HStack(spacing: -(size * 0.3)) {
+            ForEach(Array(visible.enumerated()), id: \.element.id) { index, entry in
+                AvatarView.accent(
+                    name: entry.user.displayName,
+                    imageUrl: entry.user.profileImageUrl,
+                    size: size
+                )
+                .overlay(Circle().stroke(Color.warmWhiteCard, lineWidth: 2))
+                .zIndex(Double(visible.count - index))
+            }
+
+            if overflow > 0 {
+                ZStack {
+                    Circle()
+                        .fill(Color.appAccent.opacity(0.15))
+                        .frame(width: size, height: size)
+                    Text("+\(overflow)")
+                        .font(.system(size: size * 0.35, weight: .semibold))
+                        .foregroundStyle(Color.appAccent)
+                }
+                .overlay(Circle().stroke(Color.warmWhiteCard, lineWidth: 2))
+            }
+        }
+    }
+}
+
+// MARK: - Group Tied Users List View
+
+struct GroupTiedUsersListView: View {
+    let group: GroupRankedGroup
+    let metric: GroupDetailView.LeaderboardType
+
+    var body: some View {
+        ZStack {
+            AppBackground()
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(Array(group.entries.enumerated()), id: \.element.id) { index, entry in
+                        NavigationLink {
+                            UserProfileView(userId: entry.user.id)
+                        } label: {
+                            GroupLeaderboardRow(entry: entry, isCurrentUser: group.containsCurrentUser && entry.user.id == group.entries.first?.user.id, metric: metric)
+                        }
+                        .buttonStyle(.plain)
+                        if index < group.entries.count - 1 {
+                            Divider().padding(.leading, 60)
+                        }
+                    }
+                }
+                .padding(.vertical)
+            }
+        }
+        .navigationTitle("Rank #\(group.rank)")
+        .navigationBarTitleDisplayMode(.inline)
+        .appNavigationBarStyle()
+    }
+}
+
 struct GroupDetailView: View {
     let groupId: String
     
@@ -214,37 +313,49 @@ struct GroupDetailView: View {
                     .padding(.vertical, 20)
             } else {
                 let topEntries = Array(leaderboardService.groupLeaderboard.prefix(10))
+                let currentUserId = leaderboardService.groupCurrentUserRank?.user.id
+                let groups = groupGroupsByRank(topEntries, currentUserId: currentUserId)
                 let currentUserInTop = leaderboardService.groupCurrentUserRank.map { rank in
                     topEntries.contains(where: { $0.user.id == rank.user.id })
                 } ?? true
-                
+
                 VStack(spacing: 0) {
-                    ForEach(Array(topEntries.enumerated()), id: \.element.id) { index, entry in
-                        let isCurrentUser = leaderboardService.groupCurrentUserRank?.user.id == entry.user.id
-                        let row = GroupLeaderboardRow(
-                            entry: entry,
-                            isCurrentUser: isCurrentUser,
-                            metric: selectedLeaderboard
-                        )
-                        
-                        NavigationLink {
-                            UserProfileView(userId: entry.user.id)
-                        } label: {
-                            row
+                    ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
+                        if group.entries.count == 1 {
+                            // Single user at this rank — tappable to profile
+                            let entry = group.entries[0]
+                            let isCurrentUser = entry.user.id == currentUserId
+                            NavigationLink {
+                                UserProfileView(userId: entry.user.id)
+                            } label: {
+                                GroupLeaderboardRow(
+                                    entry: entry,
+                                    isCurrentUser: isCurrentUser,
+                                    metric: selectedLeaderboard
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            // Multiple tied users — tappable to tied list
+                            NavigationLink {
+                                GroupTiedUsersListView(group: group, metric: selectedLeaderboard)
+                            } label: {
+                                GroupTiedLeaderboardRow(
+                                    group: group,
+                                    metric: selectedLeaderboard
+                                )
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
-                        
-                        if index < topEntries.count - 1 {
-                            Divider()
-                                .padding(.leading, 60)
+
+                        if index < groups.count - 1 {
+                            Divider().padding(.leading, 60)
                         }
                     }
-                    
+
                     // Show the current user's rank if they fall outside the top list
                     if let myRank = leaderboardService.groupCurrentUserRank, !currentUserInTop {
-                        Divider()
-                            .padding(.leading, 60)
-                        // This is always the current user — not tappable
+                        Divider().padding(.leading, 60)
                         GroupLeaderboardRow(
                             entry: myRank,
                             isCurrentUser: true,
@@ -441,6 +552,60 @@ struct GroupLeaderboardRow: View {
         }
     }
     
+    private func formatDuration(_ seconds: Double) -> String {
+        let total = Int(seconds)
+        if total >= 60 {
+            let mins = total / 60
+            let secs = total % 60
+            return secs > 0 ? "\(mins)m \(secs)s" : "\(mins)m"
+        }
+        return "\(total)s"
+    }
+}
+
+// MARK: - Group Tied Leaderboard Row
+
+/// A leaderboard row for a rank position shared by multiple group members.
+struct GroupTiedLeaderboardRow: View {
+    let group: GroupRankedGroup
+    let metric: GroupDetailView.LeaderboardType
+
+    var body: some View {
+        HStack(spacing: 12) {
+            RankBadge(rank: group.rank, size: 28, font: .caption)
+                .frame(width: 32)
+
+            GroupTiedAvatarStack(entries: group.entries)
+
+            Text("\(group.entries.count) tied")
+                .font(.body)
+                .fontWeight(group.containsCurrentUser ? .semibold : .regular)
+                .foregroundStyle(.primary)
+
+            Spacer()
+
+            Text(scoreLabel)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(Color.appAccent)
+        }
+        .padding(.vertical, 8)
+        .background(group.containsCurrentUser ? Color.appAccent.opacity(0.08) : Color.clear)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Rank \(group.rank), \(group.entries.count) tied users, \(scoreLabel)")
+    }
+
+    private var scoreLabel: String {
+        guard let first = group.entries.first else { return "" }
+        switch metric {
+        case .streak:
+            let streak = first.user.currentStreak ?? 0
+            return streak == 1 ? "1 day" : "\(streak) days"
+        case .longestPlank:
+            return formatDuration(first.stats.bestPlank)
+        }
+    }
+
     private func formatDuration(_ seconds: Double) -> String {
         let total = Int(seconds)
         if total >= 60 {
