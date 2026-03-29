@@ -7,16 +7,20 @@
 
 import SwiftUI
 import UIKit
+import PhotosUI
 
 struct GroupSettingsView: View {
     let groupId: String
     
     @Environment(\.groupService) private var groupService
+    @Environment(\.mediaService) private var mediaService
     @Environment(\.dismiss) private var dismiss
     
     @State private var groupName: String = ""
     @State private var groupDescription: String = ""
     @State private var requiresApproval: Bool = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var selectedImage: UIImage?
     @State private var showingDeleteConfirmation = false
     @State private var isSaving = false
     @State private var isDeleting = false
@@ -100,7 +104,18 @@ struct GroupSettingsView: View {
     }
     
     // MARK: - Subviews
-    
+
+    private var groupImagePlaceholder: some View {
+        VStack(spacing: 4) {
+            Image(systemName: "camera.fill")
+                .font(.title2)
+                .foregroundStyle(Color.appAccent)
+            Text("Add Photo")
+                .font(.caption2)
+                .foregroundStyle(Color.appAccent)
+        }
+    }
+
     private var loadingView: some View {
         ProgressView()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -108,6 +123,58 @@ struct GroupSettingsView: View {
     
     private func settingsForm(_ group: APIGroup) -> some View {
         Form {
+            Section {
+                HStack {
+                    Spacer()
+                    PhotosPicker(
+                        selection: $selectedPhotoItem,
+                        matching: .images,
+                        photoLibrary: .shared()
+                    ) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.appAccent.opacity(0.15))
+                                .frame(width: 100, height: 100)
+                            if let image = selectedImage {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 100, height: 100)
+                                    .clipShape(Circle())
+                                    .overlay(Circle().stroke(Color.appAccent, lineWidth: 2))
+                            } else if let imageUrl = group.imageUrl, !imageUrl.isEmpty {
+                                AsyncImage(url: URL(string: imageUrl)) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 100, height: 100)
+                                            .clipShape(Circle())
+                                            .overlay(Circle().stroke(Color.appAccent, lineWidth: 2))
+                                    default:
+                                        groupImagePlaceholder
+                                    }
+                                }
+                                .frame(width: 100, height: 100)
+                            } else {
+                                groupImagePlaceholder
+                            }
+                        }
+                    }
+                    Spacer()
+                }
+                .listRowBackground(Color.clear)
+            }
+            .onChange(of: selectedPhotoItem) { _, newItem in
+                Task {
+                    if let data = try? await newItem?.loadTransferable(type: Data.self),
+                       let image = UIImage(data: data) {
+                        selectedImage = image
+                    }
+                }
+            }
+
             Section("Group Info") {
                 TextField("Group Name", text: $groupName)
                     .accessibilityLabel("Group name")
@@ -303,20 +370,29 @@ struct GroupSettingsView: View {
         let nameChanged = trimmedName != currentGroup.name
         let descriptionChanged = trimmedDescription != (currentGroup.description ?? "")
         let approvalChanged = requiresApproval != currentGroup.requiresApproval
-        
-        guard nameChanged || descriptionChanged || approvalChanged else {
+        let imageChanged = selectedImage != nil
+
+        guard nameChanged || descriptionChanged || approvalChanged || imageChanged else {
             // Nothing changed — just dismiss
             dismiss()
             return
         }
-        
+
         do {
-            try await groupService.updateGroup(
-                id: groupId,
-                name: nameChanged ? trimmedName : nil,
-                description: descriptionChanged ? trimmedDescription : nil,
-                joinMode: approvalChanged ? (requiresApproval ? "request" : "open") : nil
-            )
+            if nameChanged || descriptionChanged || approvalChanged {
+                try await groupService.updateGroup(
+                    id: groupId,
+                    name: nameChanged ? trimmedName : nil,
+                    description: descriptionChanged ? trimmedDescription : nil,
+                    joinMode: approvalChanged ? (requiresApproval ? "request" : "open") : nil
+                )
+            }
+
+            if let image = selectedImage,
+               let newImageUrl = try? await mediaService.uploadGroupImage(groupId: groupId, image: image) {
+                groupService.updateGroupImage(groupId: groupId, imageUrl: newImageUrl)
+            }
+
             dismiss()
         } catch {
             saveError = error
