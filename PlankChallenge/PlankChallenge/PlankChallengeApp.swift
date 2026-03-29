@@ -105,6 +105,29 @@ final class DeviceRegistrationService {
             #endif
         }
     }
+    
+    /// Unregisters the current device token from the backend on logout.
+    /// Best-effort — errors are silently ignored so logout always completes.
+    func unregisterToken() async {
+        guard let token = registeredToken else { return }
+        do {
+            struct UnregisterBody: Encodable { let deviceToken: String }
+            let _: EmptyResponse = try await APIClient.shared.post(
+                "/devices/unregister",
+                body: UnregisterBody(deviceToken: token)
+            )
+            registeredToken = nil
+            #if DEBUG
+            print("[DeviceRegistration] Token unregistered successfully")
+            #endif
+        } catch {
+            // Non-fatal — stale token will be cleaned up by APNs 410 response
+            // on the next push attempt.
+            #if DEBUG
+            print("[DeviceRegistration] Failed to unregister token: \(error.localizedDescription)")
+            #endif
+        }
+    }
 }
 
 // MARK: - App Entry Point

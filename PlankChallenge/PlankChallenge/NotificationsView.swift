@@ -48,12 +48,6 @@ struct NotificationsView: View {
                 GroupDetailView(groupId: groupId)
             }
         }
-        .onDisappear {
-            // Auto-mark all as read when the user leaves the tab.
-            // Dots remain visible while they're on the page; they clear on exit
-            // so everything looks read next time (unless new notifications arrive).
-            Task { try? await notificationService.markAllAsRead() }
-        }
         .alert("Couldn't process request", isPresented: $showingJoinRequestError) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -236,14 +230,17 @@ struct NotificationsView: View {
                 requestId = parts[1]
             } else {
                 // Legacy format: entity.id is just the groupId.
-                // Fetch all pending requests and match by requester name (notification title).
+                // These notifications predate the "join_request" entity type (introduced
+                // when the new-format notifications were deployed). Match by the requester's
+                // display name stored in notification.title — do NOT fall back to the first
+                // pending request, as that could approve/deny the wrong person.
                 groupId = entity.id
                 try await groupService.fetchJoinRequests(groupId: groupId)
                 let requesterName = notification.title
                 guard let match = groupService.currentGroupJoinRequests.first(where: {
                     $0.user?.displayName == requesterName
-                }) ?? groupService.currentGroupJoinRequests.first else {
-                    throw GroupServiceError.validationError("No pending request found for this notification")
+                }) else {
+                    throw GroupServiceError.validationError("Couldn't find a pending request matching this notification. It may have already been actioned.")
                 }
                 requestId = match.id
             }

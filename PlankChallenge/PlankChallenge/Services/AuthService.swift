@@ -477,6 +477,11 @@ final class AuthService: AuthServiceProtocol {
         isLoading = true
         defer { isLoading = false }
         
+        // Unregister APNs device token before clearing auth — the API call
+        // needs a valid token to authenticate. Stale tokens cause silent pushes
+        // to be delivered to the wrong user's device.
+        await DeviceRegistrationService.shared.unregisterToken()
+        
         // Try to notify backend (non-critical - we'll clear local state regardless)
         if let refreshToken = await APIClient.shared.currentRefreshToken {
             do {

@@ -441,8 +441,8 @@ groups.get('/', authMiddleware, async (c) => {
     .all<GroupRecord & { role: string; member_preview_urls?: string | null }>();
   
   const groupsList = (results.results || []).map(group => {
-    // Only admins should see the invite code
-    if (group.role === 'admin') {
+    // Owners and admins see the full group (including invite code); members see the public shape
+    if (group.role === 'owner' || group.role === 'admin') {
       return formatGroup(group, { isMember: true, role: group.role });
     } else {
       return formatPublicGroup(group, { isMember: true });

@@ -49,10 +49,17 @@ struct MainTabView: View {
                 .tag(4)
         }
         .tint(Color.appAccent)
-        .onChange(of: selectedTab) { _, tab in
-            // Refresh unread count whenever the Notifications tab is selected
-            if tab == 3 {
+        .onChange(of: selectedTab) { oldTab, newTab in
+            // Refresh unread count when entering the Notifications tab
+            if newTab == 3 {
                 Task { await notificationService.fetchUnreadCount() }
+            }
+            // Mark all as read when *leaving* the Notifications tab.
+            // Doing this here (not in NotificationsView.onDisappear) ensures
+            // push-navigating to a profile/group from within the tab does NOT
+            // trigger mark-all-read — only a genuine tab switch does.
+            if oldTab == 3 && newTab != 3 {
+                Task { try? await notificationService.markAllAsRead() }
             }
         }
         .onChange(of: scenePhase) { _, phase in
