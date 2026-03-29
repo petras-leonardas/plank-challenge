@@ -720,6 +720,35 @@ groups.post('/:id/join', authMiddleware, async (c) => {
       return errors.serverError(c, 'Failed to join group');
     }
     
+    // Notify all admins/owner that a new member joined
+    try {
+      const joiner = await c.env.DB
+        .prepare('SELECT display_name FROM users WHERE id = ?')
+        .bind(userId)
+        .first<{ display_name: string }>();
+
+      const admins = await c.env.DB
+        .prepare(`SELECT user_id FROM group_members WHERE group_id = ? AND role IN ('owner', 'admin') AND status = 'active' AND user_id != ?`)
+        .bind(groupId, userId)
+        .all<{ user_id: string }>();
+
+      const adminIds = (admins.results || []).map(a => a.user_id);
+      if (adminIds.length > 0) {
+        const joinerName = joiner?.display_name || 'Someone';
+        await createNotificationBatch(
+          c.env.DB,
+          adminIds,
+          'group_joined',
+          'New Member',
+          `${joinerName} joined ${group.name}`,
+          'user',
+          userId
+        );
+      }
+    } catch (err) {
+      console.error('Failed to notify admins of new member:', err);
+    }
+
     return success(c, { 
       joined: true, 
       status: 'active',
