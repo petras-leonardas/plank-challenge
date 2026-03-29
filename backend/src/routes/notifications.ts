@@ -89,16 +89,16 @@ notifications.get('/', zValidator('query', listNotificationsSchema), async (c) =
   const params: (string | number)[] = [userId];
 
   if (unreadOnly) {
-    query += ' AND is_read = 0';
+    query += ' AND n.is_read = 0';
   }
 
-  query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+  query += ' ORDER BY n.created_at DESC LIMIT ? OFFSET ?';
   params.push(limit, offset);
 
   const result = await db
     .prepare(query)
     .bind(...params)
-    .all<NotificationRecord>();
+    .all<NotificationRecord & { live_actor_image_url?: string | null }>();
 
   // Get total count
   let countQuery = 'SELECT COUNT(*) as total FROM notifications WHERE user_id = ?';
