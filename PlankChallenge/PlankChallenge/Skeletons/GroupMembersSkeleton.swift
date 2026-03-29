@@ -9,15 +9,22 @@ import SwiftUI
 
 struct GroupMembersSkeleton: View {
     var body: some View {
-        List {
-            ForEach(0..<8, id: \.self) { _ in
-                SkeletonUserRow(avatarSize: 40, nameLine: 120, subtitleLine: 70)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparatorTint(Color.secondary.opacity(0.15))
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 0) {
+                ForEach(0..<8, id: \.self) { index in
+                    SkeletonUserRow(avatarSize: 40, nameLine: 120, subtitleLine: 70)
+                        .padding(.horizontal)
+                    if index < 7 {
+                        Divider()
+                            .padding(.leading, 64) // matches real member row indent
+                    }
+                }
             }
+            .padding(.vertical, 8)
         }
-        .listStyle(.plain)
+        .shimmer()
         .disabled(true)
+        .accessibilityLabel("Loading members")
     }
 }
 

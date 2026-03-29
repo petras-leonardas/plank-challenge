@@ -9,29 +9,45 @@ import SwiftUI
 
 struct PlankHistorySkeleton: View {
     var body: some View {
-        List {
-            // One section with a month header placeholder
-            Section {
-                ForEach(0..<5, id: \.self) { _ in
-                    SkeletonPlankHistoryRow()
-                        .listRowBackground(Color.clear)
-                }
-            } header: {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                // Month header placeholder
                 SkeletonLine(width: 100, height: 12)
-                    .padding(.vertical, 4)
-            }
+                    .padding(.horizontal)
+                    .padding(.top, 20)
+                    .padding(.bottom, 8)
 
-            Section {
-                ForEach(0..<3, id: \.self) { _ in
-                    SkeletonPlankHistoryRow()
-                        .listRowBackground(Color.clear)
+                VStack(spacing: 0) {
+                    ForEach(0..<5, id: \.self) { index in
+                        SkeletonPlankHistoryRow()
+                            .padding(.horizontal)
+                        if index < 4 {
+                            Divider().padding(.horizontal)
+                        }
+                    }
                 }
-            } header: {
+
+                // Second month section
                 SkeletonLine(width: 80, height: 12)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal)
+                    .padding(.top, 24)
+                    .padding(.bottom, 8)
+
+                VStack(spacing: 0) {
+                    ForEach(0..<3, id: \.self) { index in
+                        SkeletonPlankHistoryRow()
+                            .padding(.horizontal)
+                        if index < 2 {
+                            Divider().padding(.horizontal)
+                        }
+                    }
+                }
             }
+            .padding(.bottom, 16)
         }
+        .shimmer()
         .disabled(true)
+        .accessibilityLabel("Loading plank history")
     }
 }
 

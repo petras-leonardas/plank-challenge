@@ -3,7 +3,7 @@ import SwiftUI
 /// Onboarding Screen 3 — How It Works
 ///
 /// Briefly explains the core mechanic before the user reaches the notifications screen.
-/// Covers: how the timer works, the daily streak concept, and streak shields.
+/// Covers: how the timer works, the daily streak concept, and earning badges.
 /// No data collected on this screen.
 struct OnboardingHowItWorksView: View {
     let onContinue: () -> Void
@@ -49,10 +49,10 @@ struct OnboardingHowItWorksView: View {
                         show: showStep2
                     )
                     stepRow(
-                        icon: "shield.fill",
-                        iconColor: Color(red: 0.4, green: 0.85, blue: 0.9),
-                        title: "Miss a day? No panic",
-                        detail: "Streak shields automatically cover missed days. You start with two.",
+                        icon: "trophy.fill",
+                        iconColor: .yellow,
+                        title: "Earn badges",
+                        detail: "Hit milestones — streaks, total planks, personal bests — and collect badges.",
                         show: showStep3
                     )
                 }

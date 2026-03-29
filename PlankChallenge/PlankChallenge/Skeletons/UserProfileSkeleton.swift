@@ -16,7 +16,9 @@ struct UserProfileSkeleton: View {
             }
             .padding()
         }
+        .shimmer()
         .disabled(true)
+        .accessibilityLabel("Loading profile")
     }
 
     // MARK: - Profile Header

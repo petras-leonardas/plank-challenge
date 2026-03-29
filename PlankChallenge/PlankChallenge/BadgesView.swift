@@ -54,7 +54,7 @@ struct BadgesView: View {
             
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    if badgeService.hasLoaded {
+                    if !badgeService.availableBadges.isEmpty {
                         // 1. Earned badges
                         if !earnedAPIBadges.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
@@ -101,7 +101,6 @@ struct BadgesView: View {
                         }
                     } else {
                         BadgesSkeleton()
-                            .accessibilityLabel("Loading badges")
                     }
                 }
                 .padding(.vertical)

@@ -9,15 +9,22 @@ import SwiftUI
 
 struct NotificationsSkeleton: View {
     var body: some View {
-        List {
-            ForEach(0..<8, id: \.self) { _ in
-                SkeletonNotificationRow()
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 0) {
+                ForEach(0..<8, id: \.self) { index in
+                    SkeletonNotificationRow()
+                        .padding(.horizontal)
+                    if index < 7 {
+                        Divider()
+                            .padding(.leading, 56) // matches real notification row indent
+                    }
+                }
             }
+            .padding(.vertical, 8)
         }
-        .listStyle(.plain)
+        .shimmer()
         .disabled(true)
+        .accessibilityLabel("Loading notifications")
     }
 }
 

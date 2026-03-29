@@ -33,7 +33,6 @@ struct UserProfileView: View {
             
             if isLoading {
                 UserProfileSkeleton()
-                    .accessibilityLabel("Loading profile")
             } else if let error = loadError {
                 ErrorView(error: error) {
                     await loadProfile()

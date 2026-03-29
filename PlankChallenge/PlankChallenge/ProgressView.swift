@@ -30,7 +30,7 @@ struct PlankProgressView: View {
                 // App background with subtle gradient
                 AppBackground()
                 
-                if isLoading && !plankService.hasLoaded {
+                if !plankService.hasLoaded && plankService.planks.isEmpty {
                     // Show skeleton for initial load
                     ProgressSkeleton()
                 } else {

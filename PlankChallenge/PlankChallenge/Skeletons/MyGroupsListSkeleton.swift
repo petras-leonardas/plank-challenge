@@ -22,7 +22,9 @@ struct MyGroupsListSkeleton: View {
             }
             .padding()
         }
+        .shimmer()
         .disabled(true)
+        .accessibilityLabel("Loading groups")
     }
 }
 

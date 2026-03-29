@@ -15,6 +15,10 @@ private extension Color {
 }
 
 // MARK: - Primitive Shapes
+//
+// These shapes intentionally have NO `.shimmer()` modifier.
+// The shimmer is applied ONCE on the outermost skeleton container,
+// so a single GeometryReader drives the animation for the whole screen.
 
 /// A rounded-rectangle placeholder for a line of text.
 struct SkeletonLine: View {
@@ -27,7 +31,7 @@ struct SkeletonLine: View {
         RoundedRectangle(cornerRadius: cornerRadius)
             .fill(muted ? Color.skeletonMuted : Color.skeletonBase)
             .frame(width: width, height: height)
-            .shimmer()
+            .accessibilityHidden(true)
     }
 }
 
@@ -39,7 +43,7 @@ struct SkeletonCircle: View {
         Circle()
             .fill(Color.skeletonBase)
             .frame(width: size, height: size)
-            .shimmer()
+            .accessibilityHidden(true)
     }
 }
 
@@ -53,7 +57,7 @@ struct SkeletonBlock: View {
             .fill(Color.skeletonBase)
             .frame(maxWidth: .infinity)
             .frame(height: height)
-            .shimmer()
+            .accessibilityHidden(true)
     }
 }
 
@@ -76,14 +80,14 @@ struct SkeletonUserRow: View {
     }
 }
 
-/// A single skeleton row for a group (image + two text lines + chevron hint).
+/// A single skeleton row for a group (image + two text lines).
 struct SkeletonGroupRow: View {
     var body: some View {
         HStack(spacing: 12) {
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color.skeletonBase)
                 .frame(width: 56, height: 56)
-                .shimmer()
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 6) {
                 SkeletonLine(width: 130, height: 14)
                 SkeletonLine(width: 80, height: 11, muted: true)
@@ -130,7 +134,8 @@ struct SkeletonNotificationRow: View {
             SkeletonCircle(size: 32)
             VStack(alignment: .leading, spacing: 6) {
                 SkeletonLine(width: 150, height: 13)
-                SkeletonLine(width: 200, height: 11, muted: true)
+                // capped at 180 to avoid overflow on small screens (SE: ~244 pt available)
+                SkeletonLine(width: 180, height: 11, muted: true)
                 SkeletonLine(width: 60, height: 10, muted: true)
             }
             Spacer()

@@ -67,6 +67,32 @@ enum BadgeViewSize {
     }
 }
 
+// MARK: - Badge Icon View
+
+/// Renders a badge icon that is either an SF Symbol name or an emoji string.
+/// The API returns SF Symbol names (e.g. "timer", "star") — this handles both cases.
+struct BadgeIconView: View {
+    let icon: String
+    let size: CGFloat
+    
+    /// An emoji is a single Unicode scalar in the supplementary planes or
+    /// has an emoji presentation selector. A quick heuristic: if the string
+    /// contains only ASCII-printable characters it's an SF Symbol name.
+    private var isSFSymbol: Bool {
+        icon.unicodeScalars.allSatisfy { $0.value < 128 }
+    }
+    
+    var body: some View {
+        if isSFSymbol {
+            Image(systemName: icon)
+                .font(.system(size: size))
+        } else {
+            Text(icon)
+                .font(.system(size: size))
+        }
+    }
+}
+
 // MARK: - Badge View
 
 /// A unified badge display used in profile, progress, and the full badge catalog.
@@ -84,10 +110,10 @@ struct APIBadgeDisplayView: View {
                           : Color.statCardBackground)
                     .frame(width: size.circleSize, height: size.circleSize)
                 
-                Text(badge.icon)
-                    .font(.system(size: size.emojiSize))
+                BadgeIconView(icon: badge.icon, size: size.emojiSize)
                     .opacity(badge.earned ? 1.0 : 0.4)
                     .grayscale(badge.earned ? 0 : 1)
+                    .foregroundStyle(badge.earned ? Color.appAccent : .secondary)
             }
             
             // Badge name

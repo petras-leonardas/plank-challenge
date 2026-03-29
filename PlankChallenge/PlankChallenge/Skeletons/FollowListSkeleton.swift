@@ -9,15 +9,22 @@ import SwiftUI
 
 struct FollowListSkeleton: View {
     var body: some View {
-        List {
-            ForEach(0..<6, id: \.self) { _ in
-                SkeletonUserRow(avatarSize: 44, nameLine: 120, subtitleLine: 80)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparatorTint(Color.secondary.opacity(0.15))
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 0) {
+                ForEach(0..<6, id: \.self) { index in
+                    SkeletonUserRow(avatarSize: 44, nameLine: 120, subtitleLine: 80)
+                        .padding(.horizontal)
+                    if index < 5 {
+                        Divider()
+                            .padding(.leading, 68) // matches real row avatar indent
+                    }
+                }
             }
+            .padding(.vertical, 8)
         }
-        .listStyle(.plain)
+        .shimmer()
         .disabled(true)
+        .accessibilityLabel("Loading users")
     }
 }
 
@@ -25,6 +32,5 @@ struct FollowListSkeleton: View {
     NavigationStack {
         FollowListSkeleton()
             .navigationTitle("Following")
-            .navigationBarTitleDisplayMode(.inline)
     }
 }

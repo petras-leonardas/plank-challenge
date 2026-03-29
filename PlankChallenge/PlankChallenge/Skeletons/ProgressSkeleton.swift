@@ -27,7 +27,9 @@ struct ProgressSkeleton: View {
             }
             .padding()
         }
-        .disabled(true) // prevent interaction while skeleton is showing
+        .shimmer()
+        .disabled(true)
+        .accessibilityLabel("Loading progress")
     }
 
     // MARK: - Streak + Stats
@@ -128,6 +130,7 @@ struct BadgesSectionSkeleton: View {
             .padding(.horizontal, 4)
         }
         .padding(.vertical, 8)
+        .shimmer()
     }
 }
 
@@ -145,6 +148,7 @@ struct RecentPlanksSectionSkeleton: View {
             }
         }
         .padding(.vertical, 8)
+        .shimmer()
     }
 }
 

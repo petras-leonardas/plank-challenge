@@ -31,7 +31,9 @@ struct BadgesSkeleton: View {
             }
             .padding(.vertical)
         }
+        .shimmer()
         .disabled(true)
+        .accessibilityLabel("Loading badges")
     }
 }
 
@@ -51,6 +53,7 @@ struct ProfileBadgesSectionSkeleton: View {
             }
         }
         .padding(.vertical, 8)
+        .shimmer()
     }
 }
 

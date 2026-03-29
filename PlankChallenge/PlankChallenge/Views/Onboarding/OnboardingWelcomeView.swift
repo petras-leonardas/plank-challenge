@@ -54,7 +54,7 @@ struct OnboardingWelcomeView: View {
                         icon: "chart.line.uptrend.xyaxis",
                         iconColor: .white.opacity(0.9),
                         text: "Build your streak",
-                        subtitle: "Miss a day, use a shield. Your streak survives.",
+                        subtitle: "One plank a day. Watch your streak grow.",
                         show: showLine2
                     )
                     valueRow(

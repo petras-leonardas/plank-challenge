@@ -17,7 +17,9 @@ struct GroupsSkeleton: View {
             }
             .padding(.vertical, 16)
         }
+        .shimmer()
         .disabled(true)
+        .accessibilityLabel("Loading groups")
     }
 
     // MARK: - My Groups
@@ -119,6 +121,7 @@ struct CompactLeaderboardSkeleton: View {
             .padding(.bottom, 12)
         }
         .padding(.vertical, 8)
+        .shimmer()
     }
 }
 

@@ -15,6 +15,7 @@ struct SuggestedPeopleSkeleton: View {
                 SkeletonUserRow(avatarSize: 48, nameLine: 120, subtitleLine: 80)
             }
         }
+        .shimmer()
     }
 }
 

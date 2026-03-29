@@ -27,27 +27,8 @@ struct LeaderboardSkeleton: View {
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: 0) {
                     ForEach(0..<12, id: \.self) { index in
-                        HStack(spacing: 12) {
-                            // Rank placeholder
-                            SkeletonLine(width: 36, height: 18, cornerRadius: 6)
-                                .frame(width: 40)
-
-                            // Avatar
-                            SkeletonCircle(size: 40)
-
-                            // Name + username
-                            VStack(alignment: .leading, spacing: 5) {
-                                SkeletonLine(width: 110, height: 14)
-                                SkeletonLine(width: 70, height: 11, muted: true)
-                            }
-
-                            Spacer()
-
-                            // Score
-                            SkeletonLine(width: 55, height: 16)
-                        }
-                        .padding(.horizontal)
-                        .padding(.vertical, 8)
+                        SkeletonLeaderboardRow()
+                            .padding(.horizontal)
 
                         if index < 11 {
                             Divider().padding(.horizontal)
@@ -57,7 +38,9 @@ struct LeaderboardSkeleton: View {
                 .padding(.vertical)
             }
         }
+        .shimmer()
         .disabled(true)
+        .accessibilityLabel("Loading leaderboard")
     }
 }
 
@@ -67,20 +50,8 @@ struct FriendsLeaderboardSkeleton: View {
     var body: some View {
         VStack(spacing: 0) {
             ForEach(0..<6, id: \.self) { index in
-                HStack(spacing: 12) {
-                    SkeletonLine(width: 36, height: 18, cornerRadius: 6)
-                        .frame(width: 40)
-                    SkeletonCircle(size: 40)
-                    VStack(alignment: .leading, spacing: 5) {
-                        SkeletonLine(width: 110, height: 14)
-                        SkeletonLine(width: 70, height: 11, muted: true)
-                    }
-                    Spacer()
-                    SkeletonLine(width: 55, height: 16)
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-
+                SkeletonLeaderboardRow()
+                    .padding(.horizontal)
                 if index < 5 {
                     Divider().padding(.horizontal)
                 }
@@ -88,6 +59,7 @@ struct FriendsLeaderboardSkeleton: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
+        .shimmer()
     }
 }
 

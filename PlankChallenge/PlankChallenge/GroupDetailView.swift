@@ -207,7 +207,7 @@ struct GroupDetailView: View {
             .pickerStyle(.segmented)
             
             // Leaderboard list
-            if leaderboardService.isLoading && !leaderboardService.hasLoaded {
+            if leaderboardService.isLoading && leaderboardService.groupLeaderboard.isEmpty {
                 GroupLeaderboardSectionSkeleton()
             } else if let leaderboardError = leaderboardService.error {
                 // Leaderboard-only error — show inline rather than blocking the whole screen

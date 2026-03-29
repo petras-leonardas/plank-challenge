@@ -16,7 +16,9 @@ struct GroupDetailSkeleton: View {
             }
             .padding()
         }
+        .shimmer()
         .disabled(true)
+        .accessibilityLabel("Loading group")
     }
 
     // MARK: - Header
@@ -74,6 +76,7 @@ struct GroupLeaderboardSectionSkeleton: View {
             }
         }
         .padding(.vertical, 20)
+        .shimmer()
     }
 }
 
