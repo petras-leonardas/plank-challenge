@@ -17,14 +17,35 @@ struct BadgesView: View {
         GridItem(.adaptive(minimum: 100), spacing: 16)
     ]
     
-    // Earned badges from API
+    // Earned badges — most recently earned first
     private var earnedAPIBadges: [APIBadgeWithProgress] {
-        badgeService.availableBadges.filter { $0.earned }
+        badgeService.availableBadges
+            .filter { $0.earned }
+            .sorted {
+                // Most recently earned first; fall back to definition order
+                switch ($0.earnedAt, $1.earnedAt) {
+                case let (a?, b?): return a > b
+                case (nil, _): return false
+                case (_, nil): return true
+                }
+            }
     }
-    
-    // Locked badges from API
+
+    // Unearned badges with some progress — closest to earning first
+    private var inProgressAPIBadges: [APIBadgeWithProgress] {
+        badgeService.availableBadges
+            .filter { !$0.earned && $0.progress > 0 }
+            .sorted {
+                if $0.progress != $1.progress { return $0.progress > $1.progress }
+                return $0.order < $1.order
+            }
+    }
+
+    // Unearned badges with zero progress — definition order
     private var lockedAPIBadges: [APIBadgeWithProgress] {
-        badgeService.availableBadges.filter { !$0.earned }
+        badgeService.availableBadges
+            .filter { !$0.earned && $0.progress == 0 }
+            .sorted { $0.order < $1.order }
     }
     
     var body: some View {
@@ -33,14 +54,13 @@ struct BadgesView: View {
             
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    // Use API data if loaded
                     if badgeService.hasLoaded {
-                        // Earned badges from API
+                        // 1. Earned badges
                         if !earnedAPIBadges.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
                                 AppSectionHeader<EmptyView>(title: "EARNED (\(earnedAPIBadges.count))")
                                     .padding(.horizontal)
-                                
+
                                 LazyVGrid(columns: columns, spacing: 20) {
                                     ForEach(earnedAPIBadges) { badge in
                                         APIBadgeDisplayView(badge: badge, size: .large)
@@ -49,13 +69,28 @@ struct BadgesView: View {
                                 .padding(.horizontal)
                             }
                         }
-                        
-                        // Locked badges from API
+
+                        // 2. In-progress badges (some progress, not yet earned)
+                        if !inProgressAPIBadges.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                AppSectionHeader<EmptyView>(title: "IN PROGRESS (\(inProgressAPIBadges.count))")
+                                    .padding(.horizontal)
+
+                                LazyVGrid(columns: columns, spacing: 20) {
+                                    ForEach(inProgressAPIBadges) { badge in
+                                        APIBadgeDisplayView(badge: badge, size: .large)
+                                    }
+                                }
+                                .padding(.horizontal)
+                            }
+                        }
+
+                        // 3. Locked badges (zero progress)
                         if !lockedAPIBadges.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
                                 AppSectionHeader<EmptyView>(title: "LOCKED (\(lockedAPIBadges.count))")
                                     .padding(.horizontal)
-                                
+
                                 LazyVGrid(columns: columns, spacing: 20) {
                                     ForEach(lockedAPIBadges) { badge in
                                         APIBadgeDisplayView(badge: badge, size: .large)
@@ -65,10 +100,7 @@ struct BadgesView: View {
                             }
                         }
                     } else {
-                        // Loading state
-                        ProgressView("Loading badges...")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 40)
+                        BadgesSkeleton()
                             .accessibilityLabel("Loading badges")
                     }
                 }
@@ -78,7 +110,11 @@ struct BadgesView: View {
         .navigationTitle("Badges")
         .appNavigationBarStyle()
         .task {
-            if !badgeService.hasLoaded {
+            // Fetch available badges if we don't yet have them.
+            // Note: hasLoaded may already be true if fetchBadges() (earned-only endpoint)
+            // was called from ProfileView, but that doesn't populate availableBadges.
+            // So we check availableBadges.isEmpty directly.
+            if badgeService.availableBadges.isEmpty {
                 do {
                     try await badgeService.fetchAvailableBadges()
                 } catch is CancellationError {

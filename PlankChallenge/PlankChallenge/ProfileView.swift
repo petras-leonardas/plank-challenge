@@ -17,8 +17,11 @@ struct ProfileView: View {
     
     @State private var showingEditProfile = false
     @State private var showingPhotoEditor = false
+    @State private var showingAllBadges = false
     @State private var profileLoadError: String?
     @State private var showingProfileLoadError = false
+    @State private var badgeLoadError: String?
+    @State private var showingBadgeLoadError = false
     
     // Computed properties for API data
     private var displayName: String {
@@ -90,11 +93,6 @@ struct ProfileView: View {
                             .padding(.horizontal, 16)
                             .padding(.top, 16)
                         
-                        // Streak & Tokens
-                        streakTokensSection
-                            .padding(.horizontal, 16)
-                            .padding(.top, 16)
-                        
                         // Badges Section
                         badgesSection
                             .padding(.horizontal, 16)
@@ -106,6 +104,9 @@ struct ProfileView: View {
             .navigationBarTitleDisplayMode(.inline)
             .appNavigationBarStyle()
             .navigationTitle("Profile")
+            .navigationDestination(isPresented: $showingAllBadges) {
+                BadgesView()
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
@@ -144,6 +145,17 @@ struct ProfileView: View {
                         showingProfileLoadError = true
                     }
                 }
+                // Fetch earned badges if not already loaded
+                if !badgeService.hasLoaded {
+                    do {
+                        try await badgeService.fetchBadges()
+                    } catch is CancellationError {
+                        // View disappeared before load completed — not a user error
+                    } catch {
+                        badgeLoadError = error.localizedDescription
+                        showingBadgeLoadError = true
+                    }
+                }
             }
             .alert("Couldn't load your profile", isPresented: $showingProfileLoadError) {
                 Button("Retry") {
@@ -162,6 +174,24 @@ struct ProfileView: View {
                 Button("OK", role: .cancel) { profileLoadError = nil }
             } message: {
                 Text(profileLoadError ?? "Something went wrong. Try again.")
+            }
+            .alert("Couldn't load badges", isPresented: $showingBadgeLoadError) {
+                Button("Retry") {
+                    badgeLoadError = nil
+                    Task {
+                        do {
+                            try await badgeService.fetchBadges()
+                        } catch is CancellationError {
+                            // Cancelled — not a user error
+                        } catch {
+                            badgeLoadError = error.localizedDescription
+                            showingBadgeLoadError = true
+                        }
+                    }
+                }
+                Button("OK", role: .cancel) { badgeLoadError = nil }
+            } message: {
+                Text(badgeLoadError ?? "Something went wrong. Try again.")
             }
         }
     }
@@ -388,9 +418,9 @@ struct ProfileView: View {
     
     private var badgesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            AppSectionHeader(title: "EARNED BADGES") {
-                BadgesView()
-            }
+            AppSectionHeader<EmptyView>(title: "EARNED BADGES", actionLabel: "See All", onAction: {
+                showingAllBadges = true
+            })
             
             // Use API badges if loaded, otherwise fall back to mock data
             if badgeService.hasLoaded {
@@ -410,9 +440,7 @@ struct ProfileView: View {
                 }
             } else {
                 // Loading state
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
+                ProfileBadgesSectionSkeleton()
             }
         }
         .appCardStyle()
@@ -433,8 +461,8 @@ struct ProfileAPIBadgeView: View {
                     .frame(width: BadgeViewSize.small.circleSize,
                            height: BadgeViewSize.small.circleSize)
                 
-                Text(badge.icon)
-                    .font(.system(size: BadgeViewSize.small.emojiSize))
+                BadgeIconView(icon: badge.icon, size: BadgeViewSize.small.emojiSize)
+                    .foregroundStyle(Color.appAccent)
             }
             
             // Badge name

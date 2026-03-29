@@ -114,13 +114,7 @@ struct GroupDetailView: View {
     // MARK: - Subviews
     
     private var loadingView: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-            Text("Loading group...")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        GroupDetailSkeleton()
     }
     
     private func groupContent(_ group: APIGroup) -> some View {
@@ -213,9 +207,8 @@ struct GroupDetailView: View {
             .pickerStyle(.segmented)
             
             // Leaderboard list
-            if leaderboardService.isLoading {
-                ProgressView()
-                    .padding(.vertical, 20)
+            if leaderboardService.isLoading && !leaderboardService.hasLoaded {
+                GroupLeaderboardSectionSkeleton()
             } else if let leaderboardError = leaderboardService.error {
                 // Leaderboard-only error — show inline rather than blocking the whole screen
                 Text("Couldn't load leaderboard: \(leaderboardError.localizedDescription)")

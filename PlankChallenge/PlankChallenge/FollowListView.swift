@@ -54,13 +54,7 @@ struct FollowListView: View {
     // MARK: - Subviews
     
     private var loadingView: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-            Text("Loading...")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        FollowListSkeleton()
     }
     
     private var emptyState: some View {

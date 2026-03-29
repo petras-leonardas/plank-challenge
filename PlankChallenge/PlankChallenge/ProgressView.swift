@@ -15,6 +15,8 @@ struct PlankProgressView: View {
     @State private var isLoading = false
     @State private var loadError: String?
     @State private var showingError = false
+    @State private var showingAllBadges = false
+    @State private var showingPlankHistory = false
     
     /// Best plank duration formatted
     private var bestPlankTime: String {
@@ -29,9 +31,8 @@ struct PlankProgressView: View {
                 AppBackground()
                 
                 if isLoading && !plankService.hasLoaded {
-                    // Show loading state for initial load
-                    ProgressView("Loading your progress...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // Show skeleton for initial load
+                    ProgressSkeleton()
                 } else {
                     ScrollView {
                         VStack(spacing: 24) {
@@ -61,6 +62,12 @@ struct PlankProgressView: View {
             }
             .navigationTitle("Progress")
             .appNavigationBarStyle()
+            .navigationDestination(isPresented: $showingAllBadges) {
+                BadgesView()
+            }
+            .navigationDestination(isPresented: $showingPlankHistory) {
+                PlankHistoryListView()
+            }
             .task {
                 await loadDataIfNeeded()
             }
@@ -79,28 +86,54 @@ struct PlankProgressView: View {
     
     // MARK: - Sections
     
+    /// Earned badges sorted most-recently-earned first.
+    private var widgetEarnedBadges: [APIBadgeWithProgress] {
+        badgeService.availableBadges
+            .filter { $0.earned }
+            .sorted {
+                switch ($0.earnedAt, $1.earnedAt) {
+                case let (a?, b?): return a > b
+                case (nil, _): return false
+                case (_, nil): return true
+                }
+            }
+    }
+
+    /// Unearned badges with some progress, closest-to-earning first.
+    private var widgetInProgressBadges: [APIBadgeWithProgress] {
+        badgeService.availableBadges
+            .filter { !$0.earned && $0.progress > 0 }
+            .sorted {
+                if $0.progress != $1.progress { return $0.progress > $1.progress }
+                return $0.order < $1.order
+            }
+    }
+
+    /// Badges to show in the widget: earned + in-progress, zero-progress excluded.
+    private var widgetBadges: [APIBadgeWithProgress] {
+        widgetEarnedBadges + widgetInProgressBadges
+    }
+
     private var badgesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            AppSectionHeader(title: "BADGES") {
-                BadgesView()
-            }
-            
+            AppSectionHeader<EmptyView>(title: "BADGES", onAction: {
+                showingAllBadges = true
+            })
+
             if badgeService.isLoading && !badgeService.hasLoaded {
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-            } else if badgeService.hasLoaded && badgeService.availableBadges.isEmpty {
+                BadgesSectionSkeleton()
+            } else if badgeService.hasLoaded && widgetBadges.isEmpty {
                 Text("Keep planking to earn badges")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 8)
             } else {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 16) {
-                            ForEach(badgeService.availableBadges.prefix(8)) { badge in
-                                APIBadgeDisplayView(badge: badge, size: .medium)
-                            }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 16) {
+                        ForEach(widgetBadges) { badge in
+                            APIBadgeDisplayView(badge: badge, size: .medium)
                         }
+                    }
                         .padding(.horizontal, 4)
                     }
             }
@@ -110,14 +143,12 @@ struct PlankProgressView: View {
     
     private var recentPlanksSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            AppSectionHeader(title: "RECENT PLANKS") {
-                PlankHistoryListView()
-            }
+            AppSectionHeader<EmptyView>(title: "RECENT PLANKS", onAction: {
+                showingPlankHistory = true
+            })
             
             if plankService.isLoading && !plankService.hasLoaded {
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
+                RecentPlanksSectionSkeleton()
             } else if plankService.hasLoaded && plankService.planks.isEmpty {
                 Text("No planks yet — your first one is the hardest")
                     .font(.subheadline)
@@ -135,39 +166,51 @@ struct PlankProgressView: View {
     // MARK: - Data Loading
     
     private func loadDataIfNeeded() async {
-        guard !plankService.hasLoaded else { return }
+        // Check each service independently so a pre-warmed service is not
+        // forced to reload, and an un-loaded service is never skipped.
+        let needsPlanks = !plankService.hasLoaded
+        let needsStreak = !streakService.hasLoaded
+        let needsBadges = badgeService.availableBadges.isEmpty
+        
+        guard needsPlanks || needsStreak || needsBadges else { return }
         
         isLoading = true
         loadError = nil
         showingError = false
         defer { isLoading = false }
         
-        // Load all data in parallel and collect errors
+        // Load required data in parallel and collect errors
         var errors: [Error] = []
         
         await withTaskGroup(of: Error?.self) { group in
-            group.addTask {
-                do {
-                    try await plankService.fetchPlanks(refresh: false)
-                    return nil
-                } catch {
-                    return error
+            if needsPlanks {
+                group.addTask {
+                    do {
+                        try await plankService.fetchPlanks(refresh: false)
+                        return nil
+                    } catch {
+                        return error
+                    }
                 }
             }
-            group.addTask {
-                do {
-                    try await streakService.fetchStreak()
-                    return nil
-                } catch {
-                    return error
+            if needsStreak {
+                group.addTask {
+                    do {
+                        try await streakService.fetchStreak()
+                        return nil
+                    } catch {
+                        return error
+                    }
                 }
             }
-            group.addTask {
-                do {
-                    try await badgeService.fetchAvailableBadges()
-                    return nil
-                } catch {
-                    return error
+            if needsBadges {
+                group.addTask {
+                    do {
+                        try await badgeService.fetchAvailableBadges()
+                        return nil
+                    } catch {
+                        return error
+                    }
                 }
             }
             

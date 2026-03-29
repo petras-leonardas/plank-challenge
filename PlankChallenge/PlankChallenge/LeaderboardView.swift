@@ -77,9 +77,7 @@ struct LeaderboardContent: View {
             
             // Leaderboard List
             if leaderboardService.isLoading && !leaderboardService.hasLoaded {
-                Spacer()
-                ProgressView("Loading leaderboard...")
-                Spacer()
+                LeaderboardSkeleton()
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
@@ -158,10 +156,8 @@ struct LeaderboardContent: View {
     
     @ViewBuilder
     private var friendsLeaderboardContent: some View {
-        if leaderboardService.isLoading {
-            ProgressView("Loading friends leaderboard...")
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 40)
+        if leaderboardService.isLoading && leaderboardService.followingLeaderboard.isEmpty {
+            FriendsLeaderboardSkeleton()
         } else if leaderboardService.followingLeaderboard.isEmpty {
             leaderboardEmptyState(
                 icon: "person.2",

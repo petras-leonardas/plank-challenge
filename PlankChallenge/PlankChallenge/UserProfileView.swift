@@ -32,8 +32,7 @@ struct UserProfileView: View {
             AppBackground()
             
             if isLoading {
-                ProgressView()
-                    .progressViewStyle(.circular)
+                UserProfileSkeleton()
                     .accessibilityLabel("Loading profile")
             } else if let error = loadError {
                 ErrorView(error: error) {

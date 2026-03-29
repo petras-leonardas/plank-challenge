@@ -81,24 +81,7 @@ struct SearchView: View {
             AppSectionHeader<EmptyView>(title: "SUGGESTED PEOPLE")
             
             if userService.isLoading && userService.suggestedUsers.isEmpty {
-                // Loading shimmer
-                ForEach(0..<3, id: \.self) { _ in
-                    HStack(spacing: 12) {
-                        Circle()
-                            .fill(Color.secondary.opacity(0.15))
-                            .frame(width: 48, height: 48)
-                        VStack(alignment: .leading, spacing: 6) {
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color.secondary.opacity(0.15))
-                                .frame(width: 120, height: 14)
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color.secondary.opacity(0.1))
-                                .frame(width: 80, height: 11)
-                        }
-                        Spacer()
-                    }
-                    .padding(.vertical, 6)
-                }
+                SuggestedPeopleSkeleton()
             } else if userService.suggestedUsers.isEmpty {
                 // Empty state — prompt user to search
                 VStack(spacing: 8) {

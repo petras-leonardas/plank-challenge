@@ -61,13 +61,7 @@ struct GroupsView: View {
     // MARK: - Subviews
     
     private var loadingView: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-            Text("Loading groups...")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        GroupsSkeleton()
     }
     
     private var contentView: some View {
@@ -376,9 +370,8 @@ struct CompactLeaderboardView: View {
             }
             
             // Leaderboard entries
-            if leaderboardService.isLoading {
-                ProgressView()
-                    .padding(.vertical, 40)
+            if leaderboardService.isLoading && !leaderboardService.hasLoaded {
+                CompactLeaderboardSkeleton()
             } else if activeLeaderboard.isEmpty {
                 Text(selectedTab == .friends ? "Follow people to see who's been active" : "No leaderboard data")
                     .font(.subheadline)

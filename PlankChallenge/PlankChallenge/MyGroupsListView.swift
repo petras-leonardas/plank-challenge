@@ -49,13 +49,7 @@ struct MyGroupsListView: View {
     // MARK: - Subviews
     
     private var loadingView: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-            Text("Loading groups...")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        MyGroupsListSkeleton()
     }
     
     private var emptyState: some View {

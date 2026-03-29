@@ -41,13 +41,7 @@ struct GroupMembersListView: View {
     // MARK: - Subviews
     
     private var loadingView: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-            Text("Loading members...")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        GroupMembersSkeleton()
     }
     
     private var emptyState: some View {

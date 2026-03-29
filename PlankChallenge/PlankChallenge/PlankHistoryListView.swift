@@ -53,28 +53,25 @@ struct PlankHistoryListView: View {
     }
     
     var body: some View {
-        List {
+        Group {
             if plankService.isLoading && !plankService.hasLoaded {
-                Section {
-                    HStack {
-                        Spacer()
-                        ProgressView("Loading plank history...")
-                        Spacer()
-                    }
-                    .padding(.vertical, 8)
-                }
-            } else if plankService.hasLoaded && plankService.planks.isEmpty {
-                Section {
-                    Text("No planks yet — your first one is waiting")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 8)
-                }
+                PlankHistorySkeleton()
             } else {
-                ForEach(planksGroupedByMonth, id: \.key) { month, sessions in
-                    Section(month) {
-                        ForEach(sessions) { session in
-                            APIPlankHistoryRowFull(session: session)
+                List {
+                    if plankService.hasLoaded && plankService.planks.isEmpty {
+                        Section {
+                            Text("No planks yet — your first one is waiting")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .padding(.vertical, 8)
+                        }
+                    } else {
+                        ForEach(planksGroupedByMonth, id: \.key) { month, sessions in
+                            Section(month) {
+                                ForEach(sessions) { session in
+                                    APIPlankHistoryRowFull(session: session)
+                                }
+                            }
                         }
                     }
                 }

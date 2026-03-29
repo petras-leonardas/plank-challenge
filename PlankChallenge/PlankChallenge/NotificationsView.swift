@@ -56,7 +56,7 @@ struct NotificationsView: View {
     // MARK: - Subviews
     
     private var loadingView: some View {
-        LoadingView("Loading notifications...")
+        NotificationsSkeleton()
     }
     
     private var notificationsList: some View {
