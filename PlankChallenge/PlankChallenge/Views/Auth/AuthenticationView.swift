@@ -10,6 +10,8 @@ struct AuthenticationView: View {
     @State private var isSigningInWithApple = false
     @State private var showError = false
     @State private var errorMessage: String?
+    @State private var showEmailSignIn = false
+    @State private var showEmailSignUp = false
     
     var body: some View {
         GeometryReader { geometry in
@@ -128,20 +130,53 @@ struct AuthenticationView: View {
             .buttonStyle(.bordered)
             .tint(.primary)
             .disabled(isSigningInWithApple || authService.isLoading)
+            
+            // Sign in with email
+            Button {
+                showEmailSignIn = true
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "envelope")
+                        .frame(width: 20, height: 20)
+                    Text("Sign in with email")
+                        .fontWeight(.medium)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+            }
+            .buttonStyle(.bordered)
+            .tint(.primary)
+            .disabled(isSigningInWithApple || authService.isLoading)
         }
         .padding(.horizontal, 24)
+        .sheet(isPresented: $showEmailSignIn) {
+            EmailSignInView()
+        }
     }
     
     // MARK: - Sign Up Section
     
     private var signUpSection: some View {
-        // Terms notice only — no email sign-up link
-        Text("By continuing, you agree to our Terms of Service and Privacy Policy.")
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 32)
-            .padding(.top, 24)
+        VStack(spacing: 8) {
+            HStack(spacing: 4) {
+                Text("Don't have an account?")
+                    .foregroundStyle(.secondary)
+                Button("Create one") {
+                    showEmailSignUp = true
+                }
+            }
+            .font(.subheadline)
+            
+            Text("By continuing, you agree to our Terms of Service and Privacy Policy.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 32)
+        .padding(.top, 24)
+        .sheet(isPresented: $showEmailSignUp) {
+            EmailSignUpView()
+        }
     }
     
     // MARK: - Google Sign In Handler
