@@ -682,12 +682,27 @@ groups.delete('/:id', authMiddleware, async (c) => {
     return errors.forbidden(c, 'Only the group creator can delete the group');
   }
   
+  // Fetch all active member IDs before soft-deleting so we can notify them.
+  // Exclude the creator — they initiated the deletion and their own list will
+  // update from the optimistic in-memory removal on iOS.
+  const membersResult = await c.env.DB
+    .prepare(`SELECT user_id FROM group_members WHERE group_id = ? AND status = 'active' AND user_id != ?`)
+    .bind(groupId, userId)
+    .all<{ user_id: string }>();
+  const memberIds = (membersResult.results || []).map(r => r.user_id);
+
   // Soft delete the group
   const now = new Date().toISOString();
   await c.env.DB
     .prepare('UPDATE groups SET deleted_at = ?, updated_at = ? WHERE id = ?')
     .bind(now, now, groupId)
     .run();
+
+  // Push a "groups" refresh to all other members so the deleted group
+  // disappears from their list immediately without requiring a pull-to-refresh.
+  if (memberIds.length > 0) {
+    memberIds.forEach(memberId => sendSilentPush(c.env, memberId, ['groups']).catch(() => {}));
+  }
   
   return success(c, { deleted: true });
 });
@@ -805,7 +820,8 @@ groups.post('/:id/join', authMiddleware, async (c) => {
           'user',
           userId,
           joiner?.profile_image_url ?? undefined,
-          c.env
+          c.env,
+          ['groups'],
         );
       }
     } catch (err) {
@@ -868,7 +884,8 @@ groups.post('/:id/join', authMiddleware, async (c) => {
         'join_request',
         `${groupId}:${requestId}`,   // "groupId:requestId" — split on ':' in iOS
         requester?.profile_image_url ?? undefined,
-        c.env
+        c.env,
+        ['groups'],
       );
     } catch (err) {
       console.error('Failed to notify admins:', err);
@@ -1144,7 +1161,8 @@ groups.delete('/:id/members/:userId', authMiddleware, async (c) => {
     return errors.serverError(c, 'Failed to remove member');
   }
   
-  // Notify the removed user
+  // Notify the removed user — include "groups" refresh so the group disappears
+  // from their list immediately, consistent with the ban flow.
   try {
     await createNotification(
       c.env.DB,
@@ -1155,7 +1173,8 @@ groups.delete('/:id/members/:userId', authMiddleware, async (c) => {
       'group',
       groupId,
       undefined,
-      c.env
+      c.env,
+      ['groups'],
     );
   } catch (err) {
     console.error('Failed to notify removed user:', err);

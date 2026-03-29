@@ -56,7 +56,7 @@ struct MainTabView: View {
             if newTab == 3 {
                 Task {
                     await notificationService.fetchUnreadCount()
-                    try? await notificationService.fetchNotifications()
+                    try? await notificationService.fetchNotifications(force: false)
                 }
             }
             // Mark all as read when *leaving* the Notifications tab.
@@ -73,11 +73,13 @@ struct MainTabView: View {
             // Refresh key data every time the app returns to the foreground.
             // This acts as a safety net for silent pushes that were throttled or
             // missed while the app was suspended.
+            // Note: discoverGroups is intentionally excluded — it's a global public
+            // listing unaffected by the current user's membership events and is
+            // expensive to query. It refreshes on tab-tap via GroupsView.task.
             if phase == .active, case .authenticated = authService.state {
                 Task {
                     await notificationService.fetchUnreadCount()
                     try? await groupService.fetchMyGroups()
-                    try? await groupService.fetchDiscoverGroups()
                 }
             }
         }

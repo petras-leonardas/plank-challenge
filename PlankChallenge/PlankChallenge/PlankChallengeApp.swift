@@ -71,12 +71,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // pushes sent before the typed payload was introduced.
         let refreshTypes = (userInfo["refreshType"] as? [String]) ?? ["notifications"]
 
-        Task {
+        // @MainActor ensures all state mutations on @Observable @MainActor services
+        // happen on the main actor, matching their isolation requirement.
+        Task { @MainActor in
             for type in refreshTypes {
                 switch type {
                 case "notifications":
                     await InAppNotificationService.shared.fetchUnreadCount()
-                    try? await InAppNotificationService.shared.fetchNotifications()
+                    try? await InAppNotificationService.shared.fetchNotifications(force: false)
                 case "groups":
                     try? await GroupService.shared.fetchMyGroups()
                     try? await GroupService.shared.fetchDiscoverGroups()
