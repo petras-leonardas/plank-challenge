@@ -8,21 +8,29 @@
 import SwiftUI
 import PhotosUI
 
+// MARK: - Group Section Enum
+
+enum GroupSection: String, CaseIterable {
+    case myGroups = "My Groups"
+    case discover = "Discover"
+    case rankings = "Rankings"
+}
+
 // MARK: - Groups View
 
 struct GroupsView: View {
     @Environment(\.groupService) private var groupService
     @State private var showingCreateGroup = false
-    
+    @State private var selectedSection: GroupSection = .myGroups
+
     var body: some View {
         NavigationStack {
             ZStack {
-                // App background with subtle gradient
                 AppBackground()
-                
+
                 Group {
                     if groupService.isLoading && !groupService.hasLoaded {
-                        loadingView
+                        GroupsSkeleton()
                     } else if let error = groupService.error, !groupService.hasLoaded {
                         ErrorView(error: error) {
                             await loadData()
@@ -47,9 +55,6 @@ struct GroupsView: View {
             .sheet(isPresented: $showingCreateGroup) {
                 CreateGroupView()
             }
-            .refreshable {
-                await loadData()
-            }
             .task {
                 if !groupService.hasLoaded {
                     await loadData()
@@ -57,52 +62,44 @@ struct GroupsView: View {
             }
         }
     }
-    
-    // MARK: - Subviews
-    
-    private var loadingView: some View {
-        GroupsSkeleton()
-    }
-    
+
+    // MARK: - Content
+
     private var contentView: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                // My Groups Section
-                myGroupsSection
-                
-                // Discover Groups Section
-                discoverGroupsSection
-                
-                // Global Leaderboard Section
-                globalLeaderboardSection
-            }
-            .padding(.vertical, 16)
-        }
-    }
-    
-    // MARK: - My Groups Section
-    
-    private var myGroupsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Section Header
-            Group {
-                if groupService.myGroups.count > 3 {
-                    AppSectionHeader(title: "MY GROUPS") {
-                        MyGroupsListView()
-                    }
-                } else {
-                    AppSectionHeader<EmptyView>(title: "MY GROUPS")
+        VStack(spacing: 0) {
+            // Segmented section picker
+            Picker("Section", selection: $selectedSection) {
+                ForEach(GroupSection.allCases, id: \.self) { section in
+                    Text(section.rawValue).tag(section)
                 }
             }
+            .pickerStyle(.segmented)
             .padding(.horizontal, 16)
-            
-            if groupService.myGroups.isEmpty {
-                // Empty State
-                emptyMyGroupsState
-            } else {
-                // Show top 3 groups (sorted by most recent update)
-                VStack(spacing: 8) {
-                    ForEach(Array(sortedMyGroups.prefix(3))) { group in
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            // Active section content
+            switch selectedSection {
+            case .myGroups:
+                myGroupsContent
+            case .discover:
+                discoverContent
+            case .rankings:
+                rankingsContent
+            }
+        }
+    }
+
+    // MARK: - My Groups
+
+    private var myGroupsContent: some View {
+        ScrollView {
+            VStack(spacing: 8) {
+                if groupService.myGroups.isEmpty {
+                    emptyMyGroupsState
+                        .padding(.top, 8)
+                } else {
+                    ForEach(sortedMyGroups) { group in
                         NavigationLink {
                             GroupDetailView(groupId: group.id)
                         } label: {
@@ -111,32 +108,33 @@ struct GroupsView: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, 16)
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+        .refreshable {
+            await loadData()
         }
     }
-    
-    /// My groups sorted by most recent activity (updatedAt)
+
     private var sortedMyGroups: [APIGroup] {
         groupService.myGroups.sorted { $0.updatedDate > $1.updatedDate }
     }
-    
-    // MARK: - Empty My Groups State
-    
+
     private var emptyMyGroupsState: some View {
         VStack(spacing: 12) {
             Image(systemName: "person.3")
                 .font(.system(size: 36))
                 .foregroundStyle(.secondary)
-            
+
             Text("No groups yet")
                 .font(.headline)
-            
+
             Text("Groups are where things get competitive. Create one or join an existing group to get on a shared leaderboard.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            
+
             Button {
                 showingCreateGroup = true
             } label: {
@@ -147,28 +145,19 @@ struct GroupsView: View {
         }
         .frame(maxWidth: .infinity)
         .appCardStyle()
-        .padding(.horizontal, 16)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("No groups yet. Join a group or create your own to compete with others.")
     }
-    
-    // MARK: - Discover Groups Section
-    
-    private var discoverGroupsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Section Header
-            AppSectionHeader<EmptyView>(title: "DISCOVER GROUPS")
-                .padding(.horizontal, 16)
-            
-            if groupService.discoverGroups.isEmpty {
-                Text("No public groups available")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .appCardStyleCompact()
-                    .padding(.horizontal, 16)
-            } else {
-                VStack(spacing: 8) {
+
+    // MARK: - Discover
+
+    private var discoverContent: some View {
+        ScrollView {
+            VStack(spacing: 8) {
+                if groupService.discoverGroups.isEmpty {
+                    emptyDiscoverState
+                        .padding(.top, 8)
+                } else {
                     ForEach(groupService.discoverGroups) { group in
                         NavigationLink {
                             GroupDetailView(groupId: group.id)
@@ -178,32 +167,47 @@ struct GroupsView: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, 16)
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+        .refreshable {
+            await loadData()
         }
     }
-    
-    // MARK: - Global Leaderboard Section
-    
-    private var globalLeaderboardSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Section Header
-            AppSectionHeader<EmptyView>(title: "GLOBAL LEADERBOARD")
-                .padding(.horizontal, 16)
-            
-            CompactLeaderboardView()
-                .padding(.horizontal, 16)
+
+    private var emptyDiscoverState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 36))
+                .foregroundStyle(.secondary)
+
+            Text("No groups to discover")
+                .font(.headline)
+
+            Text("There are no public groups available right now. Create one and others will find you.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
+        .frame(maxWidth: .infinity)
+        .appCardStyle()
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("No public groups available.")
     }
-    
+
+    // MARK: - Rankings
+
+    private var rankingsContent: some View {
+        LeaderboardContent()
+    }
+
     // MARK: - Data Loading
-    
+
     private func loadData() async {
         do {
-            // Load both my groups and discover groups in parallel
             async let myGroupsTask: () = groupService.fetchMyGroups()
             async let discoverTask: () = groupService.fetchDiscoverGroups()
-            
             _ = try await (myGroupsTask, discoverTask)
         } catch {
             // Errors are stored in service
@@ -344,132 +348,6 @@ struct DiscoverGroupRowCard: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(group.name), \(group.memberCount) members\(group.requiresApproval ? ", approval required" : "")")
         .accessibilityHint("Tap to view group details")
-    }
-}
-
-// MARK: - Compact Leaderboard View (Top 5 + Current User)
-
-struct CompactLeaderboardView: View {
-    @Environment(\.leaderboardService) private var leaderboardService
-    @State private var selectedTab: LeaderboardTab = .streak
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            // Tab Picker
-            Picker("Leaderboard", selection: $selectedTab) {
-                ForEach(LeaderboardTab.allCases, id: \.self) { tab in
-                    Text(tab.rawValue).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 12)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
-            .onChange(of: selectedTab) { _, newTab in
-                Task { await loadLeaderboard(for: newTab) }
-            }
-            
-            // Leaderboard entries
-            if leaderboardService.isLoading && !leaderboardService.hasLoaded {
-                CompactLeaderboardSkeleton()
-            } else if activeLeaderboard.isEmpty {
-                Text(selectedTab == .friends ? "Follow people to see who's been active" : "No leaderboard data")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 40)
-            } else {
-                leaderboardContent
-            }
-        }
-        .appCardStyle()
-        .task {
-            await loadLeaderboard(for: selectedTab)
-        }
-    }
-    
-    /// The leaderboard entries to display for the current tab.
-    private var activeLeaderboard: [APILeaderboardEntry] {
-        selectedTab == .friends
-            ? leaderboardService.followingLeaderboard
-            : leaderboardService.globalLeaderboard
-    }
-    
-    /// The current user's rank entry for the current tab (nil for friends tab).
-    private var activeUserRank: APILeaderboardEntry? {
-        selectedTab == .friends ? nil : leaderboardService.userGlobalRank
-    }
-    
-    private var leaderboardContent: some View {
-        VStack(spacing: 0) {
-            let top5 = Array(activeLeaderboard.prefix(5))
-            
-            ForEach(Array(top5.enumerated()), id: \.element.id) { index, entry in
-                CompactLeaderboardRow(entry: entry)
-                
-                if index < top5.count - 1 {
-                    Divider()
-                        .padding(.horizontal, 12)
-                }
-            }
-            
-            // Show current user's rank if they fall outside the top 5 (global tabs only)
-            if let userRank = activeUserRank, userRank.rank > 5 {
-                HStack {
-                    ForEach(0..<3, id: \.self) { _ in
-                        Circle()
-                            .fill(Color.secondary.opacity(0.3))
-                            .frame(width: 4, height: 4)
-                    }
-                }
-                .padding(.vertical, 8)
-                
-                CompactLeaderboardRow(entry: userRank)
-            }
-        }
-        .padding(.bottom, 12)
-    }
-    
-    private func loadLeaderboard(for tab: LeaderboardTab) async {
-        do {
-            switch tab {
-            case .streak:
-                try await leaderboardService.fetchGlobalLeaderboard(
-                    type: .streak, period: .weekly, limit: 5)
-            case .longestPlank:
-                try await leaderboardService.fetchGlobalLeaderboard(
-                    type: .longestPlank, period: .weekly, limit: 5)
-            case .friends:
-                try await leaderboardService.fetchFollowingLeaderboard(
-                    type: .streak, period: .weekly)
-            }
-        } catch {
-            // Error is stored in leaderboardService.error
-        }
-    }
-}
-
-// MARK: - Compact Leaderboard Row (uses APILeaderboardEntry)
-
-struct CompactLeaderboardRow: View {
-    let entry: APILeaderboardEntry
-    
-    var body: some View {
-        NavigationLink {
-            UserProfileView(userId: entry.user.id)
-        } label: {
-            LeaderboardRowView(
-                rank: entry.rank,
-                name: entry.user.displayName,
-                avatarText: String(entry.user.displayName.prefix(1)),
-                displayValue: entry.scoreLabel,
-                isCurrentUser: entry.isCurrentUser,
-                avatarImageName: entry.user.profileImageUrl,
-                size: .compact
-            )
-        }
-        .buttonStyle(.plain)
     }
 }
 
