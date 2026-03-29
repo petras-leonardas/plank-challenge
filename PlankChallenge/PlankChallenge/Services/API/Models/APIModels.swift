@@ -758,6 +758,7 @@ struct GroupDetailResponse: Decodable {
     // Membership fields (present only when the requester is a member)
     let isMember: Bool?
     let role: String?
+    let pendingRequest: Bool?
     
     /// Convenience: reconstruct an `APIGroup` for use in the rest of the app.
     var group: APIGroup {
@@ -766,7 +767,7 @@ struct GroupDetailResponse: Decodable {
             imageUrl: imageUrl, groupType: groupType, joinMode: joinMode,
             memberCount: memberCount, createdBy: createdBy,
             inviteCode: inviteCode, createdAt: createdAt, updatedAt: updatedAt,
-            pendingRequest: nil
+            pendingRequest: pendingRequest
         )
     }
     
