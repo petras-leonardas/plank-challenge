@@ -144,7 +144,7 @@ Services are singletons created in `PlankChallengeApp.swift` and injected into t
 
 ### Content and copy
 
-Before writing any user-facing text — button labels, empty states, alerts, error messages, notifications, badge descriptions — read `CONTENT_STRATEGY.md`. It defines the voice, terminology rules, capitalisation mechanics, and has reference copy for every screen.
+Before writing any user-facing text — button labels, empty states, alerts, error messages, notifications, badge descriptions — read `CONTENT_STRATEGY.md`. It defines the voice, terminology rules, capitalisation mechanics, and has reference copy for every screen. Do not skip this step.
 
 Key rules to know without reading the full doc:
 
