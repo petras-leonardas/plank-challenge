@@ -49,7 +49,6 @@ struct PlankTimerView: View {
     @State private var saveError: String?
     @State private var showingManualEntry = false
     @State private var buttonScale: CGFloat = 1.0
-    @FocusState private var goalFieldFocused: Bool
     
     // Enhanced timer state
     // Note: double-tap protection during save is handled by the state machine —
@@ -64,10 +63,18 @@ struct PlankTimerView: View {
     // Timer mode: free (count up) or goal (countdown from a target)
     @State private var timerMode: TimerMode = .free
     
+    // MARK: - Shifting background gradient
+    // Cycles through Color.plankPhaseBottomColors every 40s (10s hold + 30s transition).
+    @State private var gradientPhase: Int = 0
+    @State private var currentBottomColor: Color = Color.plankPhaseBottomColors[0]
+    @State private var currentGlowColor: Color = Color.plankPhaseGlowColors[0]
+    @State private var gradientCycleTimer: Timer?
+    
     // Goal duration stored locally and synced to backend
     @AppStorage("plankGoalSeconds") private var storedGoalSeconds: Int = 60
-    // Text field binding for the goal input — kept in sync with storedGoalSeconds
-    @State private var goalInputText: String = ""
+    // Wheel picker state — kept in sync with storedGoalSeconds
+    @State private var selectedMinutes: Int = 1
+    @State private var selectedSeconds: Int = 0
     
     // Settings
     @AppStorage("soundEnabled") private var soundEnabled = true
@@ -140,9 +147,13 @@ struct PlankTimerView: View {
             let centerY = fullHeight / 2 - safeAreaTop
             
             ZStack {
-                // Full screen gradient background
-                LinearGradient.plankGradient
-                    .ignoresSafeArea()
+                // Full screen gradient background — animates between phase colors
+                LinearGradient(
+                    colors: [Color.plankGradientStart, currentBottomColor],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
                 
                 // Celebration/CompletedToday: Lava lamp bubbles + overlay effects
                 if timerState.showsCelebrationBubbles {
@@ -176,12 +187,23 @@ struct PlankTimerView: View {
                 instructionText
                     .position(x: geometry.size.width / 2, y: centerY - (maxButtonSize / 2) - 50)
                 
-                // Mode selector + goal input — positioned below the button, only in .ready.
-                // .transition(.opacity) is required: without it SwiftUI does not animate
-                // conditional insertion/removal of absolutely-positioned views in a ZStack.
+                // Mode selector + wheel picker — pinned below the button, only in .ready.
+                // Anchored at the top of the pill so the pill Y never shifts when the
+                // wheel expands downward. We use .frame(maxHeight:.infinity, alignment:.top)
+                // inside a container placed at a fixed Y so .position() centres the
+                // container — but the container is tall enough that the pill stays put.
+                // .transition(.opacity) is required for animated removal from ZStack.
                 if timerState == .ready {
                     timerModeSelector
-                        .position(x: geometry.size.width / 2, y: centerY + (baseButtonSize / 2) + 52)
+                        // The view has a fixed height of 168pt (set inside timerModeSelector).
+                        // .position() places the centre of the view at this coordinate.
+                        // Centre = button bottom edge + 20pt gap + 84pt (half of 168) = +104pt.
+                        // This is stable: the container height never changes, so the pill
+                        // top never jumps when the wheel appears or disappears.
+                        .position(
+                            x: geometry.size.width / 2,
+                            y: centerY + (baseButtonSize / 2) + 104
+                        )
                         .transition(.opacity)
                 }
                 
@@ -212,8 +234,9 @@ struct PlankTimerView: View {
         }
         .onAppear {
             checkForNewDayOrExistingPlanks()
-            // Initialise the goal input text from stored value
-            goalInputText = "\(storedGoalSeconds)"
+            // Seed wheel picker from stored goal, snapping seconds to nearest 5-second step
+            selectedMinutes = storedGoalSeconds / 60
+            selectedSeconds = ((storedGoalSeconds % 60) / 5) * 5
         }
         .onDisappear {
             cleanup()
@@ -295,7 +318,8 @@ struct PlankTimerView: View {
             // updated their goal on another device or after a reinstall.
             guard let serverGoal = profile?.plankGoalSeconds, serverGoal > 0 else { return }
             storedGoalSeconds = serverGoal
-            goalInputText = "\(serverGoal)"
+            selectedMinutes = serverGoal / 60
+            selectedSeconds = ((serverGoal % 60) / 5) * 5
         }
         .onChange(of: plankService.hasPlankToday) { _, hasPlank in
             // React to plank state changes driven by PlankService rather than the
@@ -630,56 +654,73 @@ struct PlankTimerView: View {
     }
     // MARK: - Mode Selector
     
-    /// Segmented control + optional goal input shown below the button in .ready state
+    /// Segmented control + wheel duration picker shown below the button in .ready state.
+    ///
+    /// The container has a fixed height of 168pt (32pt pill + 16pt gap + 120pt wheel)
+    /// and is always top-aligned. This means .position() always centres the same
+    /// fixed-height box, so the pill never jumps when the wheel appears or disappears.
     private var timerModeSelector: some View {
-        VStack(spacing: 12) {
-            // Free / Goal segmented picker
+        VStack(spacing: 0) {
+            // Stopwatch / Countdown segmented pill
             Picker("Mode", selection: $timerMode) {
                 ForEach(TimerMode.allCases, id: \.self) { mode in
                     Text(mode.rawValue).tag(mode)
                 }
             }
             .pickerStyle(.segmented)
-            .frame(width: 180)
-            // Tint the segmented control to match the white-on-gradient aesthetic
+            .frame(width: 220)
             .colorMultiply(.white)
             
-            // Goal duration input — only visible when Goal mode is selected
+            // Wheel duration picker — only in Countdown mode, expands downward
             if timerMode == .goal {
-                HStack(spacing: 6) {
-                    TextField("60", text: $goalInputText)
-                        .keyboardType(.numberPad)
-                        .multilineTextAlignment(.center)
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .frame(width: 72)
-                        .focused($goalFieldFocused)
-                        .onChange(of: goalInputText) { _, newValue in
-                            // Sanitise: digits only, cap at 4 chars to prevent absurd values
-                            let digits = newValue.filter(\.isNumber)
-                            let capped = String(digits.prefix(4))
-                            if capped != newValue {
-                                goalInputText = capped
-                            }
-                            // Update stored goal and schedule a debounced backend sync
-                            if let parsed = Int(capped), parsed > 0 {
-                                storedGoalSeconds = parsed
-                                scheduleGoalSync(seconds: parsed)
-                            }
+                HStack(spacing: 0) {
+                    // Minutes wheel: 0–59
+                    Picker("Minutes", selection: $selectedMinutes) {
+                        ForEach(0..<60) { m in
+                            Text("\(m) min")
+                                .foregroundStyle(.white)
+                                .tag(m)
                         }
+                    }
+                    .pickerStyle(.wheel)
+                    .frame(width: 120, height: 120)
+                    .clipped()
+                    .onChange(of: selectedMinutes) { _, _ in commitWheelGoal() }
                     
-                    Text("sec")
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.7))
+                    // Seconds wheel: 0, 5, 10, … 55 in 5-second steps
+                    Picker("Seconds", selection: $selectedSeconds) {
+                        ForEach(Array(stride(from: 0, through: 55, by: 5)), id: \.self) { s in
+                            Text("\(s) sec")
+                                .foregroundStyle(.white)
+                                .tag(s)
+                        }
+                    }
+                    .pickerStyle(.wheel)
+                    .frame(width: 120, height: 120)
+                    .clipped()
+                    .onChange(of: selectedSeconds) { _, _ in commitWheelGoal() }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Color.white.opacity(0.15))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.top, 16)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
+            
+            Spacer(minLength: 0)
         }
-        .animation(.easeInOut(duration: 0.2), value: timerMode)
+        // Fixed height keeps the .position() anchor stable regardless of wheel visibility.
+        // 168 = 32pt pill + 16pt gap + 120pt wheel
+        .frame(width: 260, height: 168, alignment: .top)
+        .animation(.easeInOut(duration: 0.25), value: timerMode)
+    }
+    
+    /// Called when either wheel changes. Updates storedGoalSeconds and schedules a
+    /// debounced backend sync. Falls back to 5 seconds minimum (0 min 0 sec → 5 sec).
+    private func commitWheelGoal() {
+        let total = selectedMinutes * 60 + selectedSeconds
+        let clamped = max(5, total)
+        // If both wheels are 0, bump seconds to 5 to prevent a zero-duration goal
+        if total == 0 { selectedSeconds = 5 }
+        storedGoalSeconds = clamped
+        scheduleGoalSync(seconds: clamped)
     }
     
     /// Debounced backend sync for the goal preference — cancels any in-flight task
@@ -694,7 +735,7 @@ struct PlankTimerView: View {
                 let request = UpdateProfileRequest(plankGoalSeconds: seconds)
                 let _: APIUser = try await APIClient.shared.patch("/users/me", body: request)
             } catch is CancellationError {
-                // Superseded by a newer keystroke — no-op
+                // Superseded by a newer wheel scroll — no-op
             } catch {
                 // Non-critical: the value is already saved locally via @AppStorage.
                 // Don't surface an alert — this is a background preference sync.
@@ -708,9 +749,6 @@ struct PlankTimerView: View {
     // MARK: - Actions
     
     private func handleButtonTap() {
-        // Dismiss the goal input keyboard before transitioning state
-        goalFieldFocused = false
-        
         switch timerState {
         case .ready:
             startCountdown()
