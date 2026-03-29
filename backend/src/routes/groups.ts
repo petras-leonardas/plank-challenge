@@ -1106,6 +1106,11 @@ groups.post('/:id/members/:userId/demote', authMiddleware, async (c) => {
     .prepare('UPDATE group_members SET role = ?, updated_at = ? WHERE group_id = ? AND user_id = ?')
     .bind('member', now, groupId, targetUserId)
     .run();
+
+  // Push a "groups" refresh to the demoted user's devices so their invite
+  // code and admin controls disappear immediately rather than waiting for
+  // the next foreground safety net. Symmetric with the promote flow.
+  sendSilentPush(c.env, targetUserId, ['groups']).catch(() => {});
   
   return success(c, { demoted: true, role: 'member' });
 });
