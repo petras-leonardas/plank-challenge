@@ -111,7 +111,10 @@ final class MockUserService: UserServiceProtocol {
     func fetchProfile() async throws { }
     @discardableResult
     func updateProfile(displayName: String?, location: String?, bio: String?, preferredPlankType: String?, plankGoalSeconds: Int?) async throws -> APIUser {
-        fatalError("MockUserService.updateProfile not implemented")
+        guard let profile = currentUserProfile else {
+            throw UserServiceError.unknown("No profile loaded in mock")
+        }
+        return profile
     }
     func refreshCurrentUserProfile() async { }
     func searchUsers(query: String) async throws { }

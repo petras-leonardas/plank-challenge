@@ -579,7 +579,7 @@ enum UserServiceError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .unauthorized:
-            return "Please sign in to continue."
+            return "Sign in to continue."
         case .notFound:
             return "User not found."
         case .usernameTaken:

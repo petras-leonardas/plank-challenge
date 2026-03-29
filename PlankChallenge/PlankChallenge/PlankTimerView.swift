@@ -49,6 +49,7 @@ struct PlankTimerView: View {
     @State private var saveError: String?
     @State private var showingManualEntry = false
     @State private var buttonScale: CGFloat = 1.0
+    @FocusState private var goalFieldFocused: Bool
     
     // Enhanced timer state
     // Note: double-tap protection during save is handled by the state machine —
@@ -215,7 +216,11 @@ struct PlankTimerView: View {
             cleanup()
         }
         .onChange(of: timerService.hasReachedGoal) { _, reached in
-            // Auto-submit when the goal countdown hits zero
+            // Auto-submit when the goal countdown hits zero.
+            // The timerState guard is load-bearing: hasReachedGoal can remain true
+            // briefly after stopPlank() moves state to .celebration, due to the
+            // Timer tick Task executing after stop() is called. Without this guard,
+            // stopPlank() would fire twice.
             guard reached, timerState == .active else { return }
             stopPlank()
         }
@@ -645,6 +650,7 @@ struct PlankTimerView: View {
                         .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
                         .frame(width: 72)
+                        .focused($goalFieldFocused)
                         .onChange(of: goalInputText) { _, newValue in
                             // Sanitise: digits only, cap at 4 chars to prevent absurd values
                             let digits = newValue.filter(\.isNumber)
@@ -680,7 +686,10 @@ struct PlankTimerView: View {
         goalSyncTask = Task { @MainActor in
             do {
                 try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second debounce
-                try await userService.updateProfile(displayName: nil, location: nil, bio: nil, preferredPlankType: nil, plankGoalSeconds: seconds)
+                // Call APIClient directly to avoid setting UserService.isLoading, which
+                // would briefly show a loading indicator on any view that observes it.
+                let request = UpdateProfileRequest(plankGoalSeconds: seconds)
+                let _: APIUser = try await APIClient.shared.patch("/users/me", body: request)
             } catch is CancellationError {
                 // Superseded by a newer keystroke — no-op
             } catch {
@@ -696,6 +705,9 @@ struct PlankTimerView: View {
     // MARK: - Actions
     
     private func handleButtonTap() {
+        // Dismiss the goal input keyboard before transitioning state
+        goalFieldFocused = false
+        
         switch timerState {
         case .ready:
             startCountdown()
@@ -738,9 +750,6 @@ struct PlankTimerView: View {
             PlankAudioService.shared.playCountdownBeep()
         }
         
-        // Schedule countdown timer
-        // Note: For SwiftUI structs, we capture self by value (copy) since structs are value types.
-        // Timer invalidation happens in onDisappear to prevent memory issues.
         countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
             Task { @MainActor in
                 guard case .countdown(let current) = timerState else {
@@ -797,10 +806,16 @@ struct PlankTimerView: View {
         
         // In goal mode, tell TimerService the target so it can compute displayTime and
         // fire hasReachedGoal. elapsedTime still counts up for the saved duration.
-        if timerMode == .goal {
+        // Guard: if the input was cleared (storedGoalSeconds is 0 or goal text is blank),
+        // fall back to free mode rather than starting with an undefined goal.
+        if timerMode == .goal, storedGoalSeconds > 0 {
             timerService.goalSeconds = storedGoalSeconds
         }
         
+        // Order matters: timerState must be .active before timerService.start() is called.
+        // onChange(of: timerService.hasReachedGoal) checks timerState == .active; if the
+        // state transition happened after start(), a very short goal could fire hasReachedGoal
+        // before the guard is in place.
         withAnimation(.easeInOut(duration: 0.4)) {
             timerState = .active
         }
