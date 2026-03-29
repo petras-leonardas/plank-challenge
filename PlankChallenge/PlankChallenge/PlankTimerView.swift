@@ -196,12 +196,12 @@ struct PlankTimerView: View {
                     timerModeSelector
                         // The view has a fixed height of 168pt (set inside timerModeSelector).
                         // .position() places the centre of the view at this coordinate.
-                        // Centre = button bottom edge + 20pt gap + 84pt (half of 168) = +104pt.
+                        // Centre = button bottom edge + 36pt gap + 84pt (half of 168) = +120pt.
                         // This is stable: the container height never changes, so the pill
                         // top never jumps when the wheel appears or disappears.
                         .position(
                             x: geometry.size.width / 2,
-                            y: centerY + (baseButtonSize / 2) + 104
+                            y: centerY + (baseButtonSize / 2) + 120
                         )
                         .transition(.opacity)
                 }
