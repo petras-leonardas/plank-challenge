@@ -313,6 +313,14 @@ struct GroupDetailView: View {
         if groupService.isCurrentUserMember {
             // Members (including admin) manage the group via the gear icon in the toolbar.
             EmptyView()
+        } else if group.pendingRequest == true {
+            // User already has a pending join request — non-actionable state
+            Button { } label: {
+                Label("Request sent", systemImage: "clock")
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(true)
+            .opacity(0.6)
         } else {
             Button {
                 Task { await joinGroup() }

@@ -782,16 +782,16 @@ groups.post('/:id/join', authMiddleware, async (c) => {
       .bind(requestId, groupId, userId, now, now)
       .run();
     
-    // Notify group admins (using batch for efficiency)
+    // Notify group admins and owner (using batch for efficiency)
     const admins = await c.env.DB
-      .prepare(`SELECT user_id FROM group_members WHERE group_id = ? AND role = 'admin' AND status = 'active'`)
+      .prepare(`SELECT user_id FROM group_members WHERE group_id = ? AND role IN ('owner', 'admin') AND status = 'active'`)
       .bind(groupId)
       .all<{ user_id: string }>();
     
     const requester = await c.env.DB
-      .prepare('SELECT display_name FROM users WHERE id = ?')
+      .prepare('SELECT display_name, profile_image_url FROM users WHERE id = ?')
       .bind(userId)
-      .first<{ display_name: string }>();
+      .first<{ display_name: string; profile_image_url: string | null }>();
     
     const requesterName = requester?.display_name || 'Someone';
     const adminIds = (admins.results || []).map(a => a.user_id);
@@ -801,10 +801,11 @@ groups.post('/:id/join', authMiddleware, async (c) => {
         c.env.DB,
         adminIds,
         'group_join_request',
-        'New Join Request',
-        `${requesterName} wants to join ${group.name}`,
+        requesterName,
+        `wants to join ${group.name}`,
         'group',
-        groupId
+        groupId,
+        requester?.profile_image_url ?? undefined
       );
     } catch (err) {
       console.error('Failed to notify admins:', err);

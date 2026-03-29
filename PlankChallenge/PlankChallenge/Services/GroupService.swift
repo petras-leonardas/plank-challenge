@@ -193,13 +193,38 @@ final class GroupService: GroupServiceProtocol {
         error = nil
         
         do {
-            let _: JoinLeaveResponse = try await APIClient.shared.post("/groups/\(groupId)/join", body: EmptyGroupBody())
+            let response: JoinLeaveResponse = try await APIClient.shared.post("/groups/\(groupId)/join", body: EmptyGroupBody())
             
-            // Refresh my groups list
-            try await fetchMyGroups()
-            
-            // Remove from discover list if present
-            discoverGroups.removeAll { $0.id == groupId }
+            if response.status == "pending" {
+                // Request-to-join: update currentGroup's pendingRequest flag locally
+                // so the UI immediately shows "Request sent" without a full reload.
+                if let current = currentGroup, current.id == groupId {
+                    currentGroup = APIGroup(
+                        id: current.id, name: current.name, description: current.description,
+                        imageUrl: current.imageUrl, groupType: current.groupType,
+                        joinMode: current.joinMode, memberCount: current.memberCount,
+                        createdBy: current.createdBy, inviteCode: current.inviteCode,
+                        createdAt: current.createdAt, updatedAt: current.updatedAt,
+                        pendingRequest: true
+                    )
+                }
+                // Also update the discover list entry
+                discoverGroups = discoverGroups.map { g in
+                    guard g.id == groupId else { return g }
+                    return APIGroup(
+                        id: g.id, name: g.name, description: g.description,
+                        imageUrl: g.imageUrl, groupType: g.groupType,
+                        joinMode: g.joinMode, memberCount: g.memberCount,
+                        createdBy: g.createdBy, inviteCode: g.inviteCode,
+                        createdAt: g.createdAt, updatedAt: g.updatedAt,
+                        pendingRequest: true
+                    )
+                }
+            } else {
+                // Directly joined — refresh my groups and remove from discover
+                try await fetchMyGroups()
+                discoverGroups.removeAll { $0.id == groupId }
+            }
             
         } catch let apiError as APIClientError {
             let serviceError = GroupServiceError.fromAPIError(apiError)
@@ -524,7 +549,8 @@ final class GroupService: GroupServiceProtocol {
 private struct EmptyGroupBody: Encodable {}
 
 private struct JoinLeaveResponse: Decodable {
-    let success: Bool
+    let joined: Bool?
+    let status: String?  // "active" = joined, "pending" = request submitted
 }
 
 private struct GroupMembersResponse: Decodable {
