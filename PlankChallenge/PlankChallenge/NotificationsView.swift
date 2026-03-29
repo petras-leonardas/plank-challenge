@@ -251,7 +251,11 @@ struct NotificationRow: View {
         guard let entity = notification.relatedEntity, entity.type == "user" else { return nil }
         switch notification.type {
         case "follow", "group_joined", "group_join_request":
-            return notification.message.components(separatedBy: " ").first
+            // For "follow": title IS the person's name.
+            // For "group_joined"/"group_join_request": message is "{Name} joined/wants to join …"
+            return notification.type == "follow"
+                ? notification.title
+                : notification.message.components(separatedBy: " ").first
         default:
             return nil
         }
