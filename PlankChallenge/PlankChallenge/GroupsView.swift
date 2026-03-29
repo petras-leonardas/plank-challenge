@@ -199,7 +199,7 @@ struct GroupsView: View {
     // MARK: - Rankings
 
     private var rankingsContent: some View {
-        LeaderboardContent()
+        RankingsContent()
     }
 
     // MARK: - Data Loading

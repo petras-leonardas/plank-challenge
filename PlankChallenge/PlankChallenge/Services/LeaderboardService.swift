@@ -77,14 +77,20 @@ final class LeaderboardService: LeaderboardServiceProtocol {
     
     // MARK: - State
     
-    /// Current global leaderboard entries
+    /// Current global streak leaderboard entries
     private(set) var globalLeaderboard: [APILeaderboardEntry] = []
     
-    /// Current user's rank in the global leaderboard
+    /// Current user's rank in the global streak leaderboard
     private(set) var userGlobalRank: APILeaderboardEntry?
     
     /// Alias for userGlobalRank for consistency with view naming
     var currentUserRank: APILeaderboardEntry? { userGlobalRank }
+
+    /// Current global longest-plank leaderboard entries
+    private(set) var globalLeaderboardLongestPlank: [APILeaderboardEntry] = []
+
+    /// Current user's rank in the global longest-plank leaderboard
+    private(set) var userLongestPlankRank: APILeaderboardEntry?
     
     /// Current following leaderboard entries
     private(set) var followingLeaderboard: [APILeaderboardEntry] = []
@@ -144,6 +150,38 @@ final class LeaderboardService: LeaderboardServiceProtocol {
         limit: Int = 50
     ) async throws {
         try await fetchGlobalLeaderboardInternal(type: metric.leaderboardType, period: period, limit: limit)
+    }
+
+    /// Fetches both the streak and longest-plank leaderboards in parallel.
+    /// Used by the Rankings tab to populate both cards simultaneously.
+    func fetchGlobalLeaderboardBoth(limit: Int = 5) async throws {
+        isLoading = true
+        error = nil
+        defer { isLoading = false }
+
+        do {
+            async let streakResponse: LeaderboardResponse = APIClient.shared.get(
+                "/leaderboards/streak?period=all&limit=\(limit)"
+            )
+            async let longestResponse: LeaderboardResponse = APIClient.shared.get(
+                "/leaderboards/duration?period=all&limit=\(limit)"
+            )
+            let (streak, longest) = try await (streakResponse, longestResponse)
+            globalLeaderboard = streak.entries
+            userGlobalRank = streak.currentUserRank
+            globalLeaderboardLongestPlank = longest.entries
+            userLongestPlankRank = longest.currentUserRank
+            isStale = false
+            hasLoaded = true
+        } catch let apiError as APIClientError {
+            let serviceError = LeaderboardServiceError.fromAPIError(apiError)
+            self.error = serviceError
+            throw serviceError
+        } catch {
+            let serviceError = LeaderboardServiceError.unknown(error.localizedDescription)
+            self.error = serviceError
+            throw serviceError
+        }
     }
     
     private func fetchGlobalLeaderboardInternal(
@@ -285,7 +323,7 @@ final class LeaderboardService: LeaderboardServiceProtocol {
     /// Marks the cached leaderboard data as stale.
     /// Called after mutations that may change leaderboard rankings:
     /// plank save, plank delete, profile update, avatar update.
-    /// The next time LeaderboardContent appears it will re-fetch.
+    /// The next time RankingsContent appears it will re-fetch.
     func markStale() {
         isStale = true
     }
@@ -294,6 +332,8 @@ final class LeaderboardService: LeaderboardServiceProtocol {
     func clearData() {
         globalLeaderboard = []
         userGlobalRank = nil
+        globalLeaderboardLongestPlank = []
+        userLongestPlankRank = nil
         followingLeaderboard = []
         groupLeaderboard = []
         groupCurrentUserRank = nil

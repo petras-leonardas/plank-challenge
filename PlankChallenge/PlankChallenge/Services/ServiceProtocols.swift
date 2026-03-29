@@ -166,6 +166,8 @@ protocol LeaderboardServiceProtocol: AnyObject {
     var globalLeaderboard: [APILeaderboardEntry] { get }
     var userGlobalRank: APILeaderboardEntry? { get }
     var currentUserRank: APILeaderboardEntry? { get }
+    var globalLeaderboardLongestPlank: [APILeaderboardEntry] { get }
+    var userLongestPlankRank: APILeaderboardEntry? { get }
     var followingLeaderboard: [APILeaderboardEntry] { get }
     var groupLeaderboard: [GroupLeaderboardEntry] { get }
     var groupCurrentUserRank: GroupLeaderboardEntry? { get }
@@ -179,6 +181,7 @@ protocol LeaderboardServiceProtocol: AnyObject {
     // MARK: Methods
     func fetchGlobalLeaderboard(type: LeaderboardService.LeaderboardType, period: LeaderboardService.LeaderboardPeriod, limit: Int) async throws
     func fetchGlobalLeaderboard(metric: LeaderboardService.LeaderboardMetric, period: LeaderboardService.LeaderboardPeriod, limit: Int) async throws
+    func fetchGlobalLeaderboardBoth(limit: Int) async throws
     func fetchFollowingLeaderboard(type: LeaderboardService.LeaderboardType, period: LeaderboardService.LeaderboardPeriod) async throws
     func fetchGroupLeaderboard(groupId: String, type: LeaderboardService.LeaderboardType, period: LeaderboardService.LeaderboardPeriod) async throws
     func fetchGroupLeaderboard(groupId: String, metric: LeaderboardService.LeaderboardMetric, period: LeaderboardService.LeaderboardPeriod) async throws

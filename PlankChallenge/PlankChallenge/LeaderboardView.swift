@@ -7,18 +7,16 @@
 
 import SwiftUI
 
-// MARK: - Leaderboard Tab Enum
+// MARK: - Leaderboard Type Enum
 
 enum LeaderboardTab: String, CaseIterable {
     case streak = "Streak"
     case longestPlank = "Longest Plank"
-    case friends = "Following"
-    
+
     var serviceType: LeaderboardService.LeaderboardType {
         switch self {
         case .streak: return .streak
         case .longestPlank: return .longestPlank
-        case .friends: return .streak  // Friends leaderboard defaults to streak type
         }
     }
 }
@@ -28,188 +26,304 @@ enum LeaderboardTab: String, CaseIterable {
 struct LeaderboardView: View {
     var body: some View {
         NavigationStack {
-            LeaderboardContent()
-                .navigationTitle("Leaderboard")
+            RankingsContent()
+                .navigationTitle("Rankings")
         }
     }
 }
 
-// MARK: - Leaderboard Content (Embeddable)
+// MARK: - Rankings Content (embedded in Groups → Rankings segment)
 
-struct LeaderboardContent: View {
+struct RankingsContent: View {
     @Environment(\.leaderboardService) private var leaderboardService
-    
-    @State private var selectedTab: LeaderboardTab = .streak
-    @State private var selectedPeriod: LeaderboardService.LeaderboardPeriod = .weekly
     @State private var showingError = false
     @State private var errorMessage: String?
-    
-    /// A Hashable identity combining both pickers so .task(id:) re-runs when either changes.
-    private struct LeaderboardTaskID: Hashable {
-        let tab: LeaderboardTab
-        let period: LeaderboardService.LeaderboardPeriod
-    }
-    
-    private var leaderboardTaskId: LeaderboardTaskID {
-        LeaderboardTaskID(tab: selectedTab, period: selectedPeriod)
-    }
-    
+
     var body: some View {
-        VStack(spacing: 0) {
-            // Tab Picker
-            Picker("Leaderboard", selection: $selectedTab) {
-                ForEach(LeaderboardTab.allCases, id: \.self) { tab in
-                    Text(tab.rawValue).tag(tab)
-                }
+        ScrollView {
+            VStack(spacing: 16) {
+                // Streak card
+                leaderboardCard(
+                    title: "STREAK",
+                    entries: leaderboardService.globalLeaderboard,
+                    userRank: leaderboardService.userGlobalRank,
+                    tab: .streak
+                )
+
+                // Longest Plank card
+                leaderboardCard(
+                    title: "LONGEST PLANK",
+                    entries: leaderboardService.globalLeaderboardLongestPlank,
+                    userRank: leaderboardService.userLongestPlankRank,
+                    tab: .longestPlank
+                )
             }
-            .pickerStyle(.segmented)
-            .padding()
-            
-            // Period Picker
-            Picker("Period", selection: $selectedPeriod) {
-                ForEach(LeaderboardService.LeaderboardPeriod.allCases, id: \.self) { period in
-                    Text(period.displayName).tag(period)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
-            .padding(.bottom, 8)
-            
-            // Leaderboard List
-            if leaderboardService.isLoading && !leaderboardService.hasLoaded {
-                LeaderboardSkeleton()
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        if selectedTab == .friends {
-                            friendsLeaderboardContent
-                        } else {
-                            globalLeaderboardContent
-                        }
-                    }
-                    .padding(.vertical)
-                }
-                .refreshable {
-                    await loadLeaderboard()
-                }
-            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
         }
-        // Always fetch on appear and whenever the picker selection changes.
-        // .task(id:) cancels the previous fetch and re-runs automatically —
-        // this restores the original always-refresh-on-appear behaviour.
-        .task(id: leaderboardTaskId) {
-            await loadLeaderboard()
+        .refreshable {
+            await loadBoth()
         }
-        // Additionally re-fetch immediately if the leaderboard is marked stale
-        // while this view is already on screen (e.g. user saves a plank from
-        // another tab without leaving the leaderboard tab).
+        .task {
+            await loadBoth()
+        }
         .onChange(of: leaderboardService.isStale) { _, isStale in
             guard isStale else { return }
-            Task {
-                await loadLeaderboard()
-            }
+            Task { await loadBoth() }
         }
-        .alert("Couldn't load leaderboard", isPresented: $showingError) {
+        .alert("Couldn't load rankings", isPresented: $showingError) {
             Button("Retry") {
                 errorMessage = nil
-                Task {
-                    await loadLeaderboard()
-                }
+                Task { await loadBoth() }
             }
             Button("OK", role: .cancel) { errorMessage = nil }
         } message: {
             Text(errorMessage ?? "Something went wrong. Try again.")
         }
     }
-    
-    // MARK: - Sub-views
-    
+
+    // MARK: - Card builder
+
     @ViewBuilder
-    private var globalLeaderboardContent: some View {
-        if leaderboardService.hasLoaded && !leaderboardService.globalLeaderboard.isEmpty {
-            ForEach(leaderboardService.globalLeaderboard) { entry in
-                APILeaderboardRow(entry: entry)
-                if entry.id != leaderboardService.globalLeaderboard.last?.id {
-                    Divider().padding(.horizontal)
-                }
-            }
-            
-            // Show current user's rank if they're outside the visible window
-            if let userRank = leaderboardService.userGlobalRank,
-               !leaderboardService.globalLeaderboard.contains(where: { $0.id == userRank.id }) {
-                Divider().padding(.vertical, 8)
-                Text("Your rank")
+    private func leaderboardCard(
+        title: String,
+        entries: [APILeaderboardEntry],
+        userRank: APILeaderboardEntry?,
+        tab: LeaderboardTab
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header row with See All
+            HStack {
+                Text(title)
                     .font(.caption)
+                    .fontWeight(.semibold)
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
-                APILeaderboardRow(entry: userRank)
-            }
-        } else {
-            leaderboardEmptyState(
-                icon: "trophy",
-                message: "No one here yet",
-                detail: "Complete planks to appear on the leaderboard"
-            )
-        }
-    }
-    
-    @ViewBuilder
-    private var friendsLeaderboardContent: some View {
-        if leaderboardService.isLoading && leaderboardService.followingLeaderboard.isEmpty {
-            FriendsLeaderboardSkeleton()
-        } else if leaderboardService.followingLeaderboard.isEmpty {
-            leaderboardEmptyState(
-                icon: "person.2",
-                message: "No friends yet",
-                detail: "Follow people to see how you stack up against them"
-            )
-        } else {
-            ForEach(leaderboardService.followingLeaderboard) { entry in
-                APILeaderboardRow(entry: entry)
-                if entry.id != leaderboardService.followingLeaderboard.last?.id {
-                    Divider().padding(.horizontal)
+
+                Spacer()
+
+                NavigationLink {
+                    FullLeaderboardListView(tab: tab)
+                } label: {
+                    Text("See All")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Color.appAccent)
                 }
             }
-        }
-    }
-    
-    private func leaderboardEmptyState(icon: String, message: String, detail: String) -> some View {
-        EmptyStateView(icon: icon, title: message, message: detail)
-            .frame(maxHeight: 200)
-    }
-    
-    // MARK: - Data Loading
-    
-    private func loadLeaderboard() async {
-        do {
-            if selectedTab == .friends {
-                try await leaderboardService.fetchFollowingLeaderboard(
-                    type: selectedTab.serviceType,
-                    period: selectedPeriod
-                )
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
+
+            if leaderboardService.isLoading && !leaderboardService.hasLoaded {
+                RankingsCardSkeleton()
+                    .padding(.bottom, 12)
+            } else if entries.isEmpty {
+                Text("No data yet")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 16)
             } else {
-                try await leaderboardService.fetchGlobalLeaderboard(
-                    type: selectedTab.serviceType,
-                    period: selectedPeriod,
-                    limit: 50
-                )
+                let top5 = Array(entries.prefix(5))
+                VStack(spacing: 0) {
+                    ForEach(Array(top5.enumerated()), id: \.element.id) { index, entry in
+                        APILeaderboardRow(entry: entry)
+                        if index < top5.count - 1 {
+                            Divider().padding(.horizontal)
+                        }
+                    }
+
+                    // Pin current user's row if they fall outside the top 5
+                    if let rank = userRank, rank.rank > 5 {
+                        Divider().padding(.horizontal)
+                        HStack {
+                            ForEach(0..<3, id: \.self) { _ in
+                                Circle()
+                                    .fill(Color.secondary.opacity(0.3))
+                                    .frame(width: 4, height: 4)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        APILeaderboardRow(entry: rank)
+                    }
+                }
+                .padding(.bottom, 4)
             }
+        }
+        .appCardStyle()
+    }
+
+    // MARK: - Data Loading
+
+    private func loadBoth() async {
+        do {
+            try await leaderboardService.fetchGlobalLeaderboardBoth(limit: 5)
         } catch is CancellationError {
-            // Task was cancelled (e.g. tab/period changed rapidly, view disappeared) — not a user error
+            // Task cancelled — not a user-visible error
         } catch {
             errorMessage = error.localizedDescription
             showingError = true
         }
     }
-    
+}
+
+// MARK: - Full Leaderboard List View (See All destination)
+
+struct FullLeaderboardListView: View {
+    let tab: LeaderboardTab
+
+    @Environment(\.leaderboardService) private var leaderboardService
+    @State private var showingError = false
+    @State private var errorMessage: String?
+
+    private var entries: [APILeaderboardEntry] {
+        switch tab {
+        case .streak: return leaderboardService.globalLeaderboard
+        case .longestPlank: return leaderboardService.globalLeaderboardLongestPlank
+        }
+    }
+
+    private var userRank: APILeaderboardEntry? {
+        switch tab {
+        case .streak: return leaderboardService.userGlobalRank
+        case .longestPlank: return leaderboardService.userLongestPlankRank
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            AppBackground()
+
+            Group {
+                if leaderboardService.isLoading && entries.isEmpty {
+                    LeaderboardSkeleton()
+                } else if entries.isEmpty {
+                    EmptyStateView(
+                        icon: "trophy",
+                        title: "No one here yet",
+                        message: "Complete planks to appear on the leaderboard"
+                    )
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(entries) { entry in
+                                NavigationLink {
+                                    UserProfileView(userId: entry.user.id)
+                                } label: {
+                                    APILeaderboardRow(entry: entry)
+                                }
+                                .buttonStyle(.plain)
+
+                                if entry.id != entries.last?.id {
+                                    Divider().padding(.horizontal)
+                                }
+                            }
+
+                            // Pin current user's rank if outside the loaded window
+                            if let rank = userRank,
+                               !entries.contains(where: { $0.id == rank.id }) {
+                                Divider().padding(.vertical, 8)
+                                Text("Your rank")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal)
+                                NavigationLink {
+                                    UserProfileView(userId: rank.user.id)
+                                } label: {
+                                    APILeaderboardRow(entry: rank)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.vertical)
+                    }
+                    .refreshable {
+                        await loadFull()
+                    }
+                }
+            }
+        }
+        .navigationTitle(tab.rawValue)
+        .navigationBarTitleDisplayMode(.inline)
+        .appNavigationBarStyle()
+        .task {
+            await loadFull()
+        }
+        .alert("Couldn't load rankings", isPresented: $showingError) {
+            Button("Retry") {
+                errorMessage = nil
+                Task { await loadFull() }
+            }
+            Button("OK", role: .cancel) { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "Something went wrong. Try again.")
+        }
+    }
+
+    private func loadFull() async {
+        do {
+            // fetchGlobalLeaderboardBoth fetches both streak and longest-plank
+            // in parallel and stores them in their respective service properties,
+            // so both full lists stay consistent regardless of which tab is open.
+            try await leaderboardService.fetchGlobalLeaderboardBoth(limit: 100)
+        } catch is CancellationError { }
+        catch {
+            errorMessage = error.localizedDescription
+            showingError = true
+        }
+    }
+}
+
+// MARK: - Rankings Card Skeleton
+
+struct RankingsCardSkeleton: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(0..<5, id: \.self) { index in
+                HStack(spacing: 12) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.secondary.opacity(0.15))
+                        .frame(width: 32, height: 16)
+
+                    Circle()
+                        .fill(Color.secondary.opacity(0.15))
+                        .frame(width: 36, height: 36)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color.secondary.opacity(0.15))
+                            .frame(width: 100, height: 14)
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color.secondary.opacity(0.1))
+                            .frame(width: 60, height: 11)
+                    }
+
+                    Spacer()
+
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.secondary.opacity(0.15))
+                        .frame(width: 50, height: 16)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+
+                if index < 4 {
+                    Divider().padding(.horizontal)
+                }
+            }
+        }
+        .redacted(reason: .placeholder)
+    }
 }
 
 // MARK: - API Leaderboard Row
 
 struct APILeaderboardRow: View {
     let entry: APILeaderboardEntry
-    
+
     var body: some View {
         HStack(spacing: 12) {
             // Rank
@@ -217,29 +331,29 @@ struct APILeaderboardRow: View {
                 .font(.headline)
                 .foregroundStyle(rankColor)
                 .frame(width: 40)
-            
+
             // Avatar
             AvatarView.accent(
                 name: entry.user.displayName,
                 imageUrl: entry.user.profileImageUrl,
                 size: Constants.UI.avatarMedium
             )
-            
+
             // Name
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.user.displayName)
                     .font(.body)
                     .fontWeight(.medium)
-                
+
                 if let username = entry.user.username {
                     Text("@\(username)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
-            
+
             Spacer()
-            
+
             // Score
             Text(entry.scoreLabel)
                 .font(.headline)
@@ -248,7 +362,7 @@ struct APILeaderboardRow: View {
         .padding(.horizontal)
         .padding(.vertical, 8)
     }
-    
+
     private var rankColor: Color {
         switch entry.rank {
         case 1: return Color.rankGold

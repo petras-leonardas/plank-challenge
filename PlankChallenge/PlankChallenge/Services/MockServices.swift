@@ -189,6 +189,8 @@ final class MockLeaderboardService: LeaderboardServiceProtocol {
     var globalLeaderboard: [APILeaderboardEntry] = []
     var userGlobalRank: APILeaderboardEntry? = nil
     var currentUserRank: APILeaderboardEntry? { userGlobalRank }
+    var globalLeaderboardLongestPlank: [APILeaderboardEntry] = []
+    var userLongestPlankRank: APILeaderboardEntry? = nil
     var followingLeaderboard: [APILeaderboardEntry] = []
     var groupLeaderboard: [GroupLeaderboardEntry] = []
     var groupCurrentUserRank: GroupLeaderboardEntry? = nil
@@ -201,6 +203,7 @@ final class MockLeaderboardService: LeaderboardServiceProtocol {
 
     func fetchGlobalLeaderboard(type: LeaderboardService.LeaderboardType, period: LeaderboardService.LeaderboardPeriod, limit: Int) async throws { }
     func fetchGlobalLeaderboard(metric: LeaderboardService.LeaderboardMetric, period: LeaderboardService.LeaderboardPeriod, limit: Int) async throws { }
+    func fetchGlobalLeaderboardBoth(limit: Int) async throws { }
     func fetchFollowingLeaderboard(type: LeaderboardService.LeaderboardType, period: LeaderboardService.LeaderboardPeriod) async throws { }
     func fetchGroupLeaderboard(groupId: String, type: LeaderboardService.LeaderboardType, period: LeaderboardService.LeaderboardPeriod) async throws { }
     func fetchGroupLeaderboard(groupId: String, metric: LeaderboardService.LeaderboardMetric, period: LeaderboardService.LeaderboardPeriod) async throws { }
@@ -208,6 +211,8 @@ final class MockLeaderboardService: LeaderboardServiceProtocol {
     func clearData() {
         globalLeaderboard = []
         userGlobalRank = nil
+        globalLeaderboardLongestPlank = []
+        userLongestPlankRank = nil
         followingLeaderboard = []
         groupLeaderboard = []
         groupCurrentUserRank = nil
