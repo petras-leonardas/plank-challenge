@@ -244,79 +244,83 @@ struct NotificationRow: View {
     
     @State private var isActioning = false
     
-    /// The person's name for avatar display, when this is a person-based notification.
-    /// The message is always structured as "{Name} <verb> …", so the first word is the name.
-    /// AvatarView uses the first letter of this string as the initials fallback.
+    /// The person's name for avatar display.
+    /// For "follow" and "group_joined": relatedEntity is { type: "user" }, title is the name.
+    /// For "group_join_request": relatedEntity is { type: "group" }, but actorImageUrl is set
+    /// and title is the requester's name.
     private var personName: String? {
-        guard let entity = notification.relatedEntity, entity.type == "user" else { return nil }
         switch notification.type {
-        case "follow", "group_joined", "group_join_request":
-            // For "follow": title IS the person's name.
-            // For "group_joined"/"group_join_request": message is "{Name} joined/wants to join …"
-            return notification.type == "follow"
-                ? notification.title
-                : notification.message.components(separatedBy: " ").first
+        case "follow":
+            return notification.title
+        case "group_joined":
+            guard notification.relatedEntity?.type == "user" else { return nil }
+            return notification.title
+        case "group_join_request":
+            // title is the requester's name (set by backend)
+            return notification.title
         default:
             return nil
         }
     }
     
     var body: some View {
-        Button {
-            Task { await onTap() }
-        } label: {
-            HStack(alignment: .top, spacing: 12) {
-                // Avatar for person-based notifications, icon for everything else
-                if let name = personName {
-                    AvatarView(
-                        text: name,
-                        imageName: Optional<String>.none,
-                        imageUrl: notification.actorImageUrl,
-                        size: 36
-                    )
-                } else {
-                    Image(systemName: notification.iconName)
-                        .font(.title2)
-                        .foregroundStyle(iconColor)
-                        .frame(width: 36)
-                }
+        // NotificationRow intentionally does NOT use an outer Button wrapper.
+        // When Approve/Deny action buttons are present (join requests), nesting
+        // Buttons inside a Button label breaks the inner buttons in SwiftUI.
+        // Instead we use .onTapGesture for mark-as-read on plain rows.
+        HStack(alignment: .top, spacing: 12) {
+            // Avatar for person-based notifications, icon for everything else
+            if let name = personName {
+                AvatarView(
+                    text: name,
+                    imageName: Optional<String>.none,
+                    imageUrl: notification.actorImageUrl,
+                    size: 36
+                )
+            } else {
+                Image(systemName: notification.iconName)
+                    .font(.title2)
+                    .foregroundStyle(iconColor)
+                    .frame(width: 36)
+            }
+            
+            // Content
+            VStack(alignment: .leading, spacing: 4) {
+                Text(notification.title)
+                    .font(.subheadline)
+                    .fontWeight(notification.isRead ? .regular : .semibold)
+                    .foregroundStyle(.primary)
                 
-                // Content
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(notification.title)
-                        .font(.subheadline)
-                        .fontWeight(notification.isRead ? .regular : .semibold)
-                        .foregroundStyle(.primary)
-                    
-                    Text(notification.message)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    
-                    Text(notification.date.relativeFormatted)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                    
-                    // Approve/Deny buttons for join requests
-                    if onApprove != nil || onDeny != nil {
-                        joinRequestActions
-                    }
-                }
+                Text(notification.message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
                 
-                Spacer()
+                Text(notification.date.relativeFormatted)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
                 
-                // Unread indicator
-                if !notification.isRead {
-                    Circle()
-                        .fill(Color.appAccent)
-                        .frame(width: 8, height: 8)
+                // Approve/Deny buttons for join requests
+                if onApprove != nil || onDeny != nil {
+                    joinRequestActions
                 }
             }
-            .padding(.vertical, 4)
-            .contentShape(Rectangle())
+            
+            Spacer()
+            
+            // Unread indicator
+            if !notification.isRead {
+                Circle()
+                    .fill(Color.appAccent)
+                    .frame(width: 8, height: 8)
+            }
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            Task { await onTap() }
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(notification.title). \(notification.message). \(notification.date.relativeFormatted)")
         .accessibilityHint(notification.isRead ? "Notification is read" : "Tap to mark as read")

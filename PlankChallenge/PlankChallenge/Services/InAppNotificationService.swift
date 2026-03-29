@@ -334,8 +334,10 @@ extension APINotification {
             return .tokenEarned
         case "group_invite", "group_joined":
             return .groupJoined
-        case "group_join_request", "group_request_denied":
+        case "group_request_denied":
             return .joinRequestDenied
+        case "group_join_request":
+            return .joinRequestApproved  // person.badge.plus — incoming request icon
         case "group_promoted":
             return .promotedToAdmin
         case "group_removed", "group_banned":
