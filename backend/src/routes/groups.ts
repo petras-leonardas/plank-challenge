@@ -114,7 +114,7 @@ function generateInviteCode(): string {
 /**
  * Format a group record for API response
  */
-function formatGroup(group: GroupRecord, options?: { 
+function formatGroup(group: GroupRecord & { member_preview_urls?: string | null }, options?: { 
   isMember?: boolean;
   role?: string;
   pendingRequest?: boolean;
@@ -131,6 +131,9 @@ function formatGroup(group: GroupRecord, options?: {
     inviteCode: group.invite_code, // Only returned to admins
     createdAt: group.created_at,
     updatedAt: group.updated_at,
+    memberPreviews: group.member_preview_urls
+      ? group.member_preview_urls.split(',').filter(Boolean)
+      : [],
     ...(options?.isMember !== undefined && { isMember: options.isMember }),
     ...(options?.role !== undefined && { role: options.role }),
     ...(options?.pendingRequest !== undefined && { pendingRequest: options.pendingRequest }),
@@ -415,7 +418,19 @@ groups.get('/', authMiddleware, async (c) => {
   
   const results = await c.env.DB
     .prepare(`
-      SELECT g.*, gm.role
+      SELECT g.*, gm.role,
+        (
+          SELECT GROUP_CONCAT(u.profile_image_url)
+          FROM (
+            SELECT u.profile_image_url
+            FROM group_members gm2
+            INNER JOIN users u ON u.id = gm2.user_id
+            WHERE gm2.group_id = g.id AND gm2.status = 'active'
+              AND u.profile_image_url IS NOT NULL
+            ORDER BY gm2.joined_at DESC
+            LIMIT 4
+          ) u
+        ) as member_preview_urls
       FROM groups g
       INNER JOIN group_members gm ON g.id = gm.group_id
       WHERE gm.user_id = ? AND gm.status = 'active' AND g.deleted_at IS NULL
@@ -423,7 +438,7 @@ groups.get('/', authMiddleware, async (c) => {
       LIMIT ? OFFSET ?
     `)
     .bind(userId, limit, offset)
-    .all<GroupRecord & { role: string }>();
+    .all<GroupRecord & { role: string; member_preview_urls?: string | null }>();
   
   const groupsList = (results.results || []).map(group => {
     // Only admins should see the invite code
@@ -458,7 +473,19 @@ groups.get('/discover', authMiddleware, async (c) => {
     SELECT g.*,
       CASE WHEN gm.id IS NOT NULL AND gm.status = 'active' THEN 1 ELSE 0 END as is_member,
       CASE WHEN jr.id IS NOT NULL AND jr.status = 'pending' THEN 1 ELSE 0 END as has_pending_request,
-      CASE WHEN gm_banned.id IS NOT NULL THEN 1 ELSE 0 END as is_banned
+      CASE WHEN gm_banned.id IS NOT NULL THEN 1 ELSE 0 END as is_banned,
+      (
+        SELECT GROUP_CONCAT(u.profile_image_url)
+        FROM (
+          SELECT u.profile_image_url
+          FROM group_members gm2
+          INNER JOIN users u ON u.id = gm2.user_id
+          WHERE gm2.group_id = g.id AND gm2.status = 'active'
+            AND u.profile_image_url IS NOT NULL
+          ORDER BY gm2.joined_at DESC
+          LIMIT 4
+        ) u
+      ) as member_preview_urls
     FROM groups g
     LEFT JOIN group_members gm ON g.id = gm.group_id AND gm.user_id = ? AND gm.status = 'active'
     LEFT JOIN group_members gm_banned ON g.id = gm_banned.group_id AND gm_banned.user_id = ? AND gm_banned.status = 'banned'
@@ -482,7 +509,7 @@ groups.get('/discover', authMiddleware, async (c) => {
   const results = await c.env.DB
     .prepare(query)
     .bind(...params)
-    .all<GroupRecord & { is_member: number; has_pending_request: number }>();
+    .all<GroupRecord & { is_member: number; has_pending_request: number; member_preview_urls?: string | null }>();
   
   const groupsList = (results.results || []).map(group => 
     formatPublicGroup(group, { 
