@@ -168,6 +168,35 @@ final class InAppNotificationService: InAppNotificationServiceProtocol {
         }
     }
     
+    /// Marks all notifications as read except unactioned join requests.
+    /// Called when the user leaves the Notifications tab — join request notifications
+    /// keep their unread dot and badge contribution until the admin approves or declines.
+    func markNonActionableAsRead() async {
+        // Split: join requests that are still pending action stay unread;
+        // everything else gets marked as read via the bulk endpoint.
+        let joinRequestIds = Set(
+            notifications
+                .filter { $0.type == "group_join_request" && !$0.isRead }
+                .map { $0.id }
+        )
+        
+        if joinRequestIds.isEmpty {
+            // No pending join requests — safe to use the fast bulk endpoint
+            try? await markAllAsRead()
+        } else {
+            // Mark every non-join-request notification as read individually.
+            // Fire all requests concurrently and ignore individual failures.
+            let toMark = notifications.filter { !$0.isRead && !joinRequestIds.contains($0.id) }
+            await withTaskGroup(of: Void.self) { group in
+                for notification in toMark {
+                    group.addTask {
+                        try? await self.markAsRead(id: notification.id)
+                    }
+                }
+            }
+        }
+    }
+    
     /// Marks all notifications as read
     func markAllAsRead() async throws {
         error = nil

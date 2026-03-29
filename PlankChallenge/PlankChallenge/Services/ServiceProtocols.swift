@@ -251,6 +251,7 @@ protocol InAppNotificationServiceProtocol: AnyObject {
     func loadMoreNotifications() async throws
     func markAsRead(id notificationId: String) async throws
     func markAllAsRead() async throws
+    func markNonActionableAsRead() async
     func fetchUnreadCount() async
     func clearData()
     func clearError()

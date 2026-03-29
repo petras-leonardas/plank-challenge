@@ -63,7 +63,9 @@ struct MainTabView: View {
             // push-navigating to a profile/group from within the tab does NOT
             // trigger mark-all-read — only a genuine tab switch does.
             if oldTab == 3 && newTab != 3 {
-                Task { try? await notificationService.markAllAsRead() }
+                // Use selective mark-as-read: join request notifications stay
+                // unread until the admin explicitly approves or declines them.
+                Task { await notificationService.markNonActionableAsRead() }
             }
         }
         .onChange(of: scenePhase) { _, phase in
