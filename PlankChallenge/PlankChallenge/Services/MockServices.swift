@@ -110,7 +110,7 @@ final class MockUserService: UserServiceProtocol {
 
     func fetchProfile() async throws { }
     @discardableResult
-    func updateProfile(displayName: String?, location: String?, bio: String?, preferredPlankType: String?) async throws -> APIUser {
+    func updateProfile(displayName: String?, location: String?, bio: String?, preferredPlankType: String?, plankGoalSeconds: Int?) async throws -> APIUser {
         fatalError("MockUserService.updateProfile not implemented")
     }
     func refreshCurrentUserProfile() async { }
@@ -277,7 +277,7 @@ final class MockNotificationService: InAppNotificationServiceProtocol {
     var hasLoaded: Bool = true
     var error: InAppNotificationServiceError? = nil
 
-    func fetchNotifications() async throws { }
+    func fetchNotifications(force: Bool = false) async throws { }
     func loadMoreNotifications() async throws { }
     func markAsRead(id notificationId: String) async throws { }
     func markAllAsRead() async throws { }

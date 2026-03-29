@@ -592,7 +592,8 @@ struct EditProfileView: View {
                 displayName: newDisplayName,
                 location: newLocation,
                 bio: newBio,
-                preferredPlankType: nil
+                preferredPlankType: nil,
+                plankGoalSeconds: nil
             )
             
             // Display name may have changed — mark leaderboard stale so the

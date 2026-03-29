@@ -154,7 +154,7 @@ struct OnboardingNameView: View {
         defer { isSaving = false }
         
         do {
-            _ = try await userService.updateProfile(displayName: trimmed, location: nil, bio: nil, preferredPlankType: nil)
+            _ = try await userService.updateProfile(displayName: trimmed, location: nil, bio: nil, preferredPlankType: nil, plankGoalSeconds: nil)
             onContinue()
         } catch {
             errorMessage = "Couldn't save your name. Try again."

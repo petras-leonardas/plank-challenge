@@ -104,7 +104,7 @@ protocol UserServiceProtocol: AnyObject {
 
     // MARK: Methods
     func fetchProfile() async throws
-    func updateProfile(displayName: String?, location: String?, bio: String?, preferredPlankType: String?) async throws -> APIUser
+    func updateProfile(displayName: String?, location: String?, bio: String?, preferredPlankType: String?, plankGoalSeconds: Int?) async throws -> APIUser
     func searchUsers(query: String) async throws
     func clearSearchResults()
     func fetchSuggestedUsers() async throws
@@ -247,7 +247,7 @@ protocol InAppNotificationServiceProtocol: AnyObject {
     var error: InAppNotificationServiceError? { get }
 
     // MARK: Methods
-    func fetchNotifications() async throws
+    func fetchNotifications(force: Bool) async throws
     func loadMoreNotifications() async throws
     func markAsRead(id notificationId: String) async throws
     func markAllAsRead() async throws

@@ -54,7 +54,9 @@ struct NotificationsView: View {
             Text(joinRequestActionError ?? "Something went wrong. Try again.")
         }
         .refreshable {
-            await fetchNotifications()
+            // Explicit pull-to-refresh bypasses the isLoading guard — the user
+            // intentionally wants fresh data regardless of any in-flight fetch.
+            await fetchNotifications(force: true)
         }
         .task {
             if !notificationService.hasLoaded {
@@ -167,9 +169,9 @@ struct NotificationsView: View {
     
     // MARK: - Actions
     
-    private func fetchNotifications() async {
+    private func fetchNotifications(force: Bool = false) async {
         do {
-            try await notificationService.fetchNotifications()
+            try await notificationService.fetchNotifications(force: force)
         } catch {
             // Error is stored in service
         }
@@ -251,7 +253,7 @@ struct NotificationsView: View {
             }
 
             // Refresh in background — row already shows confirmed state locally
-            try? await notificationService.fetchNotifications()
+            try? await notificationService.fetchNotifications(force: false)
         } catch {
             joinRequestActionError = error.localizedDescription
             showingJoinRequestError = true

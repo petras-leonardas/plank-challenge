@@ -62,8 +62,9 @@ final class InAppNotificationService: InAppNotificationServiceProtocol {
     /// second caller returns immediately. This prevents race conditions where a
     /// background silent-push fetch and a tab-select fetch run simultaneously,
     /// leaving the notifications array in an inconsistent state.
-    func fetchNotifications() async throws {
-        guard !isLoading else { return }
+    /// Pass `force: true` to bypass the guard (e.g. explicit pull-to-refresh).
+    func fetchNotifications(force: Bool = false) async throws {
+        guard !isLoading || force else { return }
         isLoading = true
         error = nil
         currentOffset = 0

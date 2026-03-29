@@ -7,6 +7,13 @@
 
 import SwiftUI
 
+// MARK: - Timer Mode
+
+enum TimerMode: String, CaseIterable {
+    case free = "Free"
+    case goal = "Goal"
+}
+
 // MARK: - Plank Timer State Machine
 
 enum PlankTimerState: Equatable {
@@ -37,6 +44,7 @@ struct PlankTimerView: View {
     @Environment(\.streakService) private var streakService
     @Environment(\.badgeService) private var badgeService
     @Environment(\.leaderboardService) private var leaderboardService
+    @Environment(\.userService) private var userService
     
     @State private var saveError: String?
     @State private var showingManualEntry = false
@@ -50,6 +58,15 @@ struct PlankTimerView: View {
     @State private var countdownTimer: Timer?
     @State private var celebrationTimer: Timer?
     @State private var saveTask: Task<Void, Never>?
+    @State private var goalSyncTask: Task<Void, Never>?
+    
+    // Timer mode: free (count up) or goal (countdown from a target)
+    @State private var timerMode: TimerMode = .free
+    
+    // Goal duration stored locally and synced to backend
+    @AppStorage("plankGoalSeconds") private var storedGoalSeconds: Int = 60
+    // Text field binding for the goal input — kept in sync with storedGoalSeconds
+    @State private var goalInputText: String = ""
     
     // Settings
     @AppStorage("soundEnabled") private var soundEnabled = true
@@ -158,6 +175,12 @@ struct PlankTimerView: View {
                 instructionText
                     .position(x: geometry.size.width / 2, y: centerY - (maxButtonSize / 2) - 50)
                 
+                // Mode selector + goal input — positioned below the button, only in .ready
+                if timerState == .ready {
+                    timerModeSelector
+                        .position(x: geometry.size.width / 2, y: centerY + (baseButtonSize / 2) + 52)
+                }
+                
                 // Top bar overlay - fixed at top
                 // Only shown in .ready state — in .completedToday the day is done,
                 // so the manual entry button is hidden (one plank per day).
@@ -185,9 +208,16 @@ struct PlankTimerView: View {
         }
         .onAppear {
             checkForNewDayOrExistingPlanks()
+            // Initialise the goal input text from stored value
+            goalInputText = "\(storedGoalSeconds)"
         }
         .onDisappear {
             cleanup()
+        }
+        .onChange(of: timerService.hasReachedGoal) { _, reached in
+            // Auto-submit when the goal countdown hits zero
+            guard reached, timerState == .active else { return }
+            stopPlank()
         }
         .onChange(of: todayPlankCount) { oldValue, newValue in
             // If all planks were deleted (from Settings), transition back to ready state
@@ -250,6 +280,14 @@ struct PlankTimerView: View {
                     todayPlankTimesJSON = json
                 }
             }
+        }
+        .onChange(of: userService.currentUserProfile) { _, profile in
+            // When the user profile loads (or is refreshed), apply the server's goal value.
+            // Server is authoritative — it may differ from local AppStorage if the user
+            // updated their goal on another device or after a reinstall.
+            guard let serverGoal = profile?.plankGoalSeconds, serverGoal > 0 else { return }
+            storedGoalSeconds = serverGoal
+            goalInputText = "\(serverGoal)"
         }
         .onChange(of: plankService.hasPlankToday) { _, hasPlank in
             // React to plank state changes driven by PlankService rather than the
@@ -582,10 +620,78 @@ struct PlankTimerView: View {
         let seconds = totalSeconds % 60
         return String(format: "%02d:%02d", minutes, seconds)
     }
+    // MARK: - Mode Selector
     
-
+    /// Segmented control + optional goal input shown below the button in .ready state
+    private var timerModeSelector: some View {
+        VStack(spacing: 12) {
+            // Free / Goal segmented picker
+            Picker("Mode", selection: $timerMode) {
+                ForEach(TimerMode.allCases, id: \.self) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 180)
+            // Tint the segmented control to match the white-on-gradient aesthetic
+            .colorMultiply(.white)
+            
+            // Goal duration input — only visible when Goal mode is selected
+            if timerMode == .goal {
+                HStack(spacing: 6) {
+                    TextField("60", text: $goalInputText)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.center)
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .frame(width: 72)
+                        .onChange(of: goalInputText) { _, newValue in
+                            // Sanitise: digits only, cap at 4 chars to prevent absurd values
+                            let digits = newValue.filter(\.isNumber)
+                            let capped = String(digits.prefix(4))
+                            if capped != newValue {
+                                goalInputText = capped
+                            }
+                            // Update stored goal and schedule a debounced backend sync
+                            if let parsed = Int(capped), parsed > 0 {
+                                storedGoalSeconds = parsed
+                                scheduleGoalSync(seconds: parsed)
+                            }
+                        }
+                    
+                    Text("sec")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color.white.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: timerMode)
+    }
     
-
+    /// Debounced backend sync for the goal preference — cancels any in-flight task
+    /// and waits 1 second of inactivity before sending the PATCH request.
+    private func scheduleGoalSync(seconds: Int) {
+        goalSyncTask?.cancel()
+        goalSyncTask = Task { @MainActor in
+            do {
+                try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second debounce
+                try await userService.updateProfile(displayName: nil, location: nil, bio: nil, preferredPlankType: nil, plankGoalSeconds: seconds)
+            } catch is CancellationError {
+                // Superseded by a newer keystroke — no-op
+            } catch {
+                // Non-critical: the value is already saved locally via @AppStorage.
+                // Don't surface an alert — this is a background preference sync.
+                #if DEBUG
+                print("[PlankTimer] Goal sync failed (non-fatal): \(error)")
+                #endif
+            }
+        }
+    }
     
     // MARK: - Actions
     
@@ -687,6 +793,12 @@ struct PlankTimerView: View {
         // Play GO sound
         if soundEnabled {
             PlankAudioService.shared.playGoSound()
+        }
+        
+        // In goal mode, tell TimerService the target so it can compute displayTime and
+        // fire hasReachedGoal. elapsedTime still counts up for the saved duration.
+        if timerMode == .goal {
+            timerService.goalSeconds = storedGoalSeconds
         }
         
         withAnimation(.easeInOut(duration: 0.4)) {
@@ -848,6 +960,8 @@ struct PlankTimerView: View {
         celebrationTimer = nil
         saveTask?.cancel()
         saveTask = nil
+        goalSyncTask?.cancel()
+        goalSyncTask = nil
         timerService.stop()
     }
 }

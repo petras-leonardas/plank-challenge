@@ -129,7 +129,7 @@ struct LogoutRequest: Encodable {
 // MARK: - User Models
 
 /// Full user model for the authenticated user (from /users/me)
-struct APIUser: Decodable, Identifiable, Sendable {
+struct APIUser: Decodable, Identifiable, Sendable, Equatable {
     let id: String
     let email: String
     let emailVerified: Bool
@@ -139,6 +139,8 @@ struct APIUser: Decodable, Identifiable, Sendable {
     let bio: String?
     let profileImageUrl: String?
     let preferredPlankType: String
+    /// Duration goal in seconds for countdown mode. nil = free mode (no goal set).
+    let plankGoalSeconds: Int?
     let currentStreak: Int
     let longestStreak: Int
     let freezeTokens: Int
@@ -178,6 +180,8 @@ struct UpdateProfileRequest: Encodable {
     var bio: String?
     var preferredPlankType: String?
     var timezone: String?
+    /// Duration goal in seconds for countdown mode. Pass nil to clear the goal.
+    var plankGoalSeconds: Int?
     
     init(
         displayName: String? = nil,
@@ -185,7 +189,8 @@ struct UpdateProfileRequest: Encodable {
         location: String? = nil,
         bio: String? = nil,
         preferredPlankType: String? = nil,
-        timezone: String? = nil
+        timezone: String? = nil,
+        plankGoalSeconds: Int? = nil
     ) {
         self.displayName = displayName
         self.username = username
@@ -193,6 +198,7 @@ struct UpdateProfileRequest: Encodable {
         self.bio = bio
         self.preferredPlankType = preferredPlankType
         self.timezone = timezone
+        self.plankGoalSeconds = plankGoalSeconds
     }
 }
 
