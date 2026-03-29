@@ -258,10 +258,17 @@ leaderboards.get('/streak', optionalAuthMiddleware, zValidator('query', leaderbo
     
     total = countResult?.count || 0;
     
-    // Format entries with ranks
+    // Format entries with DENSE_RANK: users with the same score share the same rank
+    let currentRank = offset + 1;
     entries = (results.results || []).map((user, index) => {
-      const rank = offset + index + 1;
       const score = period === 'all' ? user.longest_streak : user.current_streak;
+      if (index > 0) {
+        const prevScore = period === 'all'
+          ? results.results![index - 1].longest_streak
+          : results.results![index - 1].current_streak;
+        if (score !== prevScore) currentRank = offset + index + 1;
+      }
+      const rank = currentRank;
       const scoreLabel = `${score} day${score !== 1 ? 's' : ''}`;
       
       return formatLeaderboardEntry(user, rank, score, scoreLabel, {
@@ -316,13 +323,13 @@ leaderboards.get('/streak', optionalAuthMiddleware, zValidator('query', leaderbo
           
           if (period === 'all') {
             rankQuery = `
-              SELECT COUNT(*) + 1 as rank FROM users
+              SELECT COUNT(DISTINCT ${streakField}) + 1 as rank FROM users
               WHERE deleted_at IS NULL AND ${streakField} > ?
             `;
             rankParams.push(userScore);
           } else {
             rankQuery = `
-              SELECT COUNT(*) + 1 as rank FROM users
+              SELECT COUNT(DISTINCT current_streak) + 1 as rank FROM users
               WHERE deleted_at IS NULL 
                 AND current_streak > ?
                 AND last_plank_date >= ?
@@ -451,12 +458,19 @@ leaderboards.get('/duration', optionalAuthMiddleware, zValidator('query', leader
     
     total = countResult?.count || 0;
     
-    // Format entries
+    // Format entries with DENSE_RANK: users with the same score share the same rank
+    let currentRank = offset + 1;
     entries = (results.results || []).map((user, index) => {
-      const rank = offset + index + 1;
-      const score = period === 'all' 
-        ? user.longest_plank_seconds 
+      const score = period === 'all'
+        ? user.longest_plank_seconds
         : (user.period_longest || 0);
+      if (index > 0) {
+        const prevScore = period === 'all'
+          ? results.results![index - 1].longest_plank_seconds
+          : (results.results![index - 1].period_longest || 0);
+        if (score !== prevScore) currentRank = offset + index + 1;
+      }
+      const rank = currentRank;
       const scoreLabel = formatDuration(score);
       
       return formatLeaderboardEntry(user, rank, score, scoreLabel, {
@@ -503,7 +517,7 @@ leaderboards.get('/duration', optionalAuthMiddleware, zValidator('query', leader
         if (user && user.longest_plank_seconds > 0) {
           const rankResult = await db
             .prepare(`
-              SELECT COUNT(*) + 1 as rank FROM users
+              SELECT COUNT(DISTINCT longest_plank_seconds) + 1 as rank FROM users
               WHERE deleted_at IS NULL AND longest_plank_seconds > ?
             `)
             .bind(user.longest_plank_seconds)
@@ -529,7 +543,7 @@ leaderboards.get('/duration', optionalAuthMiddleware, zValidator('query', leader
         if (userBest?.best) {
           const rankResult = await db
             .prepare(`
-              SELECT COUNT(*) + 1 as rank
+              SELECT COUNT(DISTINCT best) + 1 as rank
               FROM (
                 SELECT u.id, MAX(p.duration_seconds) as best
                 FROM users u
@@ -658,11 +672,19 @@ leaderboards.get('/total-planks', optionalAuthMiddleware, zValidator('query', le
     
     total = countResult?.count || 0;
     
+    // Format entries with DENSE_RANK: users with the same score share the same rank
+    let currentRank = offset + 1;
     entries = (results.results || []).map((user, index) => {
-      const rank = offset + index + 1;
-      const score = period === 'all' 
-        ? user.total_planks 
+      const score = period === 'all'
+        ? user.total_planks
         : (user.period_planks || 0);
+      if (index > 0) {
+        const prevScore = period === 'all'
+          ? results.results![index - 1].total_planks
+          : (results.results![index - 1].period_planks || 0);
+        if (score !== prevScore) currentRank = offset + index + 1;
+      }
+      const rank = currentRank;
       const scoreLabel = `${score} plank${score !== 1 ? 's' : ''}`;
       
       return formatLeaderboardEntry(user, rank, score, scoreLabel, {
@@ -707,7 +729,7 @@ leaderboards.get('/total-planks', optionalAuthMiddleware, zValidator('query', le
         if (user && user.total_planks > 0) {
           const rankResult = await db
             .prepare(`
-              SELECT COUNT(*) + 1 as rank FROM users
+              SELECT COUNT(DISTINCT total_planks) + 1 as rank FROM users
               WHERE deleted_at IS NULL AND total_planks > ?
             `)
             .bind(user.total_planks)
@@ -732,7 +754,7 @@ leaderboards.get('/total-planks', optionalAuthMiddleware, zValidator('query', le
         if (userCount && userCount.count > 0) {
           const rankResult = await db
             .prepare(`
-              SELECT COUNT(*) + 1 as rank
+              SELECT COUNT(DISTINCT count) + 1 as rank
               FROM (
                 SELECT u.id, COUNT(p.id) as count
                 FROM users u
@@ -861,11 +883,19 @@ leaderboards.get('/total-time', optionalAuthMiddleware, zValidator('query', lead
     
     total = countResult?.count || 0;
     
+    // Format entries with DENSE_RANK: users with the same score share the same rank
+    let currentRank = offset + 1;
     entries = (results.results || []).map((user, index) => {
-      const rank = offset + index + 1;
-      const score = period === 'all' 
-        ? user.total_plank_seconds 
+      const score = period === 'all'
+        ? user.total_plank_seconds
         : (user.period_seconds || 0);
+      if (index > 0) {
+        const prevScore = period === 'all'
+          ? results.results![index - 1].total_plank_seconds
+          : (results.results![index - 1].period_seconds || 0);
+        if (score !== prevScore) currentRank = offset + index + 1;
+      }
+      const rank = currentRank;
       const scoreLabel = formatDuration(score);
       
       return formatLeaderboardEntry(user, rank, score, scoreLabel, {
@@ -910,7 +940,7 @@ leaderboards.get('/total-time', optionalAuthMiddleware, zValidator('query', lead
         if (user && user.total_plank_seconds > 0) {
           const rankResult = await db
             .prepare(`
-              SELECT COUNT(*) + 1 as rank FROM users
+              SELECT COUNT(DISTINCT total_plank_seconds) + 1 as rank FROM users
               WHERE deleted_at IS NULL AND total_plank_seconds > ?
             `)
             .bind(user.total_plank_seconds)
@@ -935,7 +965,7 @@ leaderboards.get('/total-time', optionalAuthMiddleware, zValidator('query', lead
         if (userTotal?.total) {
           const rankResult = await db
             .prepare(`
-              SELECT COUNT(*) + 1 as rank
+              SELECT COUNT(DISTINCT total) + 1 as rank
               FROM (
                 SELECT u.id, SUM(p.duration_seconds) as total
                 FROM users u
@@ -1080,10 +1110,16 @@ leaderboards.get('/friends', authMiddleware, zValidator('query', friendsLeaderbo
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().slice(0, 10);
 
+  // Following list uses DENSE_RANK on streak so tied friends share the same position
+  let currentRank = offset + 1;
   const entries = (results.results || []).map((user, index) => {
-    const rank = offset + index + 1;
     const streak = user.current_streak || 0;
     const score = streak;
+    if (index > 0) {
+      const prevStreak = results.results![index - 1].current_streak || 0;
+      if (streak !== prevStreak) currentRank = offset + index + 1;
+    }
+    const rank = currentRank;
     
     // Human-readable last-plank label
     let scoreLabel: string;

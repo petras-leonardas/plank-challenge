@@ -1733,10 +1733,15 @@ groups.get('/:id/leaderboard', optionalAuthMiddleware, async (c) => {
       best_plank: number | null;
     }>();
   
-  // Format and add rank
-  // Keys are snake_case so the iOS JSONDecoder (.convertFromSnakeCase) maps them correctly.
-  const leaderboard = (results.results || []).map((entry, index) => ({
-    rank: index + 1,
+  // Format and add rank using DENSE_RANK: same total_duration → same rank
+  const leaderboardResults = results.results || [];
+  let groupCurrentRank = 1;
+  const leaderboard = leaderboardResults.map((entry, index) => {
+    if (index > 0 && entry.total_duration !== leaderboardResults[index - 1].total_duration) {
+      groupCurrentRank = index + 1;
+    }
+    return {
+    rank: groupCurrentRank,
     user: {
       id: entry.id,
       display_name: entry.display_name,
@@ -1749,7 +1754,8 @@ groups.get('/:id/leaderboard', optionalAuthMiddleware, async (c) => {
       plank_count: entry.plank_count,
       best_plank: entry.best_plank || 0,
     },
-  }));
+    };
+  });
   
   // Find current user's rank if authenticated and a member
   let currentUserRank: typeof leaderboard[0] | null = null;
@@ -1812,9 +1818,21 @@ groups.get('/:id/leaderboard', optionalAuthMiddleware, async (c) => {
           .bind(...allMembersParams)
           .all<{ user_id: string; total_duration: number }>();
         
-        const userRankIndex = (allMembers.results || []).findIndex(m => m.user_id === userId);
+        const allMembersList = allMembers.results || [];
+        const userRankIndex = allMembersList.findIndex(m => m.user_id === userId);
         
         if (userRankIndex !== -1) {
+          // Compute DENSE_RANK for this user in the full sorted list
+          const userDuration = allMembersList[userRankIndex].total_duration;
+          const denseRank = allMembersList.slice(0, userRankIndex).reduce((rank, m, i) => {
+            if (i === 0) return 1;
+            return m.total_duration !== allMembersList[i - 1].total_duration ? rank + 1 : rank;
+          }, 1);
+          // Count distinct duration values strictly above the user's
+          const distinctAbove = new Set(
+            allMembersList.filter(m => m.total_duration > userDuration).map(m => m.total_duration)
+          ).size;
+          const computedRank = distinctAbove + 1;
           // Fetch user details
           const userDetails = await c.env.DB
             .prepare(`
@@ -1869,7 +1887,7 @@ groups.get('/:id/leaderboard', optionalAuthMiddleware, async (c) => {
               .first<{ plank_count: number; best_plank: number | null }>();
             
             currentUserRank = {
-              rank: userRankIndex + 1,
+              rank: computedRank,
               user: {
                 id: userDetails.id,
                 display_name: userDetails.display_name,
