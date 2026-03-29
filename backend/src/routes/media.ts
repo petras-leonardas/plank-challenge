@@ -235,7 +235,7 @@ media.post('/group/:groupId', authMiddleware, async (c) => {
     .first<Pick<GroupMemberRecord, 'role'>>();
   
   if (!membership || (membership.role !== 'admin' && membership.role !== 'owner')) {
-    return errors.forbidden(c, 'Only group admins can update the group image');
+    return errors.forbidden(c, 'Only group owners and admins can update the group image');
   }
   
   // Step 1: Validate headers
@@ -256,13 +256,17 @@ media.post('/group/:groupId', authMiddleware, async (c) => {
     return errors.validation(c, dataValidation.error!);
   }
   
-  // Get old image URL
+  // Get old image URL — also confirms the group exists
   const group = await c.env.DB
-    .prepare('SELECT image_url FROM groups WHERE id = ?')
+    .prepare('SELECT image_url FROM groups WHERE id = ? AND deleted_at IS NULL')
     .bind(groupId)
     .first<Pick<GroupRecord, 'image_url'>>();
-  
-  const oldImageKey = group ? extractKeyFromUrl(group.image_url) : null;
+
+  if (!group) {
+    return errors.notFound(c, 'Group');
+  }
+
+  const oldImageKey = extractKeyFromUrl(group.image_url);
   
   // Generate the storage key with correct extension
   const imageKey = generateImageKey('group', groupId, dataValidation.contentType!);
@@ -334,7 +338,7 @@ media.delete('/group/:groupId', authMiddleware, async (c) => {
     .first<Pick<GroupMemberRecord, 'role'>>();
   
   if (!membership || (membership.role !== 'admin' && membership.role !== 'owner')) {
-    return errors.forbidden(c, 'Only group admins can update the group image');
+    return errors.forbidden(c, 'Only group owners and admins can update the group image');
   }
   
   // Get current image URL

@@ -321,12 +321,12 @@ final class GroupService: GroupServiceProtocol {
         return groupId.unicodeScalars.allSatisfy { allowedCharacters.contains($0) }
     }
     
-    /// Patches the imageUrl of a group in the in-memory lists without a network call.
-    /// Call this immediately after a successful group image upload so the list
-    /// reflects the new photo without requiring a full re-fetch.
+    /// Patches the imageUrl of a group in all in-memory lists without a network call.
+    /// Call this immediately after a successful group image upload so all list cards
+    /// reflect the new photo without requiring a full re-fetch.
     func updateGroupImage(groupId: String, imageUrl: String) {
-        // APIGroup is a struct so we must replace the whole value
-        myGroups = myGroups.map { group in
+        // APIGroup is a struct so we must replace the whole value in every list it appears in.
+        let patch: (APIGroup) -> APIGroup = { group in
             guard group.id == groupId else { return group }
             return APIGroup(
                 id: group.id, name: group.name, description: group.description,
@@ -336,9 +336,11 @@ final class GroupService: GroupServiceProtocol {
                 updatedAt: group.updatedAt, pendingRequest: group.pendingRequest
             )
         }
-        // Also patch currentGroup if it happens to be the same group
+        myGroups = myGroups.map(patch)
+        discoverGroups = discoverGroups.map(patch)
+        // Patch currentGroup directly — avoids a second lookup through the just-mapped array.
         if currentGroup?.id == groupId {
-            currentGroup = myGroups.first { $0.id == groupId }
+            currentGroup = patch(currentGroup!)
         }
     }
 

@@ -24,6 +24,7 @@ struct GroupSettingsView: View {
     @State private var showingDeleteConfirmation = false
     @State private var isSaving = false
     @State private var isDeleting = false
+    @State private var showingSaveError = false
     @State private var saveError: Error?
     @State private var deleteError: Error?
     @State private var showingDeleteError = false
@@ -65,6 +66,16 @@ struct GroupSettingsView: View {
                 }
             }
         }
+        // Photo picker handler at the NavigationStack level — idiomatic placement,
+        // matches the CreateGroupView pattern in GroupsView.swift.
+        .onChange(of: selectedPhotoItem) { _, newItem in
+            Task {
+                if let data = try? await newItem?.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    selectedImage = image
+                }
+            }
+        }
         .alert("Delete this group?", isPresented: $showingDeleteConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Delete Group", role: .destructive) {
@@ -74,6 +85,11 @@ struct GroupSettingsView: View {
             if let group = groupService.currentGroup {
                 Text("All \(group.memberCount) members will be removed and notified. This can't be undone.")
             }
+        }
+        .alert("Couldn't save changes", isPresented: $showingSaveError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(saveError?.localizedDescription ?? "Something went wrong. Try again.")
         }
         .alert("Couldn't delete group", isPresented: $showingDeleteError) {
             Button("OK", role: .cancel) {}
@@ -166,14 +182,6 @@ struct GroupSettingsView: View {
                 }
                 .listRowBackground(Color.clear)
             }
-            .onChange(of: selectedPhotoItem) { _, newItem in
-                Task {
-                    if let data = try? await newItem?.loadTransferable(type: Data.self),
-                       let image = UIImage(data: data) {
-                        selectedImage = image
-                    }
-                }
-            }
 
             Section("Group Info") {
                 TextField("Group Name", text: $groupName)
@@ -220,14 +228,6 @@ struct GroupSettingsView: View {
                 } else {
                     Text("Invite link unavailable")
                         .foregroundStyle(.secondary)
-                }
-            }
-            
-            if let error = saveError {
-                SwiftUI.Section {
-                    Text(error.localizedDescription)
-                        .font(.caption)
-                        .foregroundStyle(.red)
                 }
             }
             
@@ -341,6 +341,9 @@ struct GroupSettingsView: View {
         groupName = group.name
         groupDescription = group.description ?? ""
         requiresApproval = group.requiresApproval
+        // Reset any pending photo selection so stale picks don't carry over
+        selectedImage = nil
+        selectedPhotoItem = nil
     }
     
     private func shareInviteLink(code: String) {
@@ -391,13 +394,12 @@ struct GroupSettingsView: View {
             if let image = selectedImage {
                 let newImageUrl = try await mediaService.uploadGroupImage(groupId: groupId, image: image)
                 groupService.updateGroupImage(groupId: groupId, imageUrl: newImageUrl)
-                // Refresh the full groups list so the list card reflects the new image
-                try? await groupService.fetchMyGroups()
             }
 
             dismiss()
         } catch {
             saveError = error
+            showingSaveError = true
         }
     }
     
