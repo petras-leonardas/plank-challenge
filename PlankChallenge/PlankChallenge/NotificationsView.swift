@@ -111,8 +111,8 @@ struct NotificationsView: View {
             return AnyView(NotificationRow(
                 notification: notification,
                 onTap: { await markAsRead(id: notification.id) },
-                onApprove: { await handleJoinRequest(notification: notification, approve: true) },
-                onDeny: { await handleJoinRequest(notification: notification, approve: false) }
+                onApprove: { try await handleJoinRequest(notification: notification, approve: true) },
+                onDeny: { try await handleJoinRequest(notification: notification, approve: false) }
             ))
         } else if let userId = navigateToUserId {
             return AnyView(NotificationRow(
@@ -194,28 +194,15 @@ struct NotificationsView: View {
     }
     
     /// Handles approve/deny for a group_join_request notification.
-    /// The notification's relatedEntity carries groupId and requestId.
-    private func handleJoinRequest(notification: APINotification, approve: Bool) async {
+    /// Throws on failure so the row doesn't transition to confirmed state.
+    private func handleJoinRequest(notification: APINotification, approve: Bool) async throws {
         guard let entity = notification.relatedEntity else { return }
-        
-        // relatedEntity.type == "group", entity.id == groupId
-        // The requestId is embedded in the notification id itself isn't reliable;
-        // we need to re-use the notification's relatedEntity.
-        // Backend: POST /groups/:groupId/requests/:requestId/approve|deny
-        // The notification carries relatedEntity { type: "group", id: groupId }.
-        // We need the requestId separately — it's stored in a second relatedEntity field.
-        // Since the backend only gives us groupId in relatedEntity, we fetch requests first.
         let groupId = entity.id
         
         do {
-            // Mark as read first (non-blocking)
             try? await notificationService.markAsRead(id: notification.id)
-            
-            // Fetch pending requests to find the matching requestId
             try await groupService.fetchJoinRequests(groupId: groupId)
             
-            // Find the first pending request (for a fresh notification there's typically one)
-            // If multiple, the admin can handle rest via Group Settings
             guard let request = groupService.currentGroupJoinRequests.first else { return }
             
             if approve {
@@ -224,11 +211,12 @@ struct NotificationsView: View {
                 try await groupService.denyJoinRequest(groupId: groupId, requestId: request.id)
             }
             
-            // Refresh notifications so the row updates
+            // Refresh in background — row already shows confirmed state locally
             try? await notificationService.fetchNotifications()
         } catch {
             joinRequestActionError = error.localizedDescription
             showingJoinRequestError = true
+            throw error  // re-throw so the row stays in pending state
         }
     }
 }
@@ -238,11 +226,15 @@ struct NotificationsView: View {
 struct NotificationRow: View {
     let notification: APINotification
     let onTap: () async -> Void
-    /// Non-nil only for group_join_request notifications (admin only)
-    var onApprove: (() async -> Void)? = nil
-    var onDeny: (() async -> Void)? = nil
+    /// Non-nil only for group_join_request notifications (admin only).
+    /// Should throw on failure so the row doesn't transition to confirmed state.
+    var onApprove: (() async throws -> Void)? = nil
+    var onDeny: (() async throws -> Void)? = nil
+    
+    enum ActionResult { case approved, denied }
     
     @State private var isActioning = false
+    @State private var actionResult: ActionResult? = nil
     
     /// The person's name for avatar display.
     /// For "follow" and "group_joined": relatedEntity is { type: "user" }, title is the name.
@@ -263,14 +255,15 @@ struct NotificationRow: View {
         }
     }
     
-    private var hasActions: Bool { onApprove != nil || onDeny != nil }
+    // Show action buttons only while no decision has been made yet
+    private var hasActions: Bool { (onApprove != nil || onDeny != nil) && actionResult == nil }
     
     var body: some View {
         if hasActions {
             // Action rows: plain HStack — no outer tap gesture so inner Buttons work
             rowContent
         } else {
-            // Plain rows: wrap in Button for tap-to-read
+            // Plain rows (and post-action rows): wrap in Button for tap-to-read
             Button {
                 Task { await onTap() }
             } label: {
@@ -315,6 +308,17 @@ struct NotificationRow: View {
                 
                 if hasActions {
                     joinRequestActions
+                } else if let result = actionResult {
+                    // Confirmed state — shown immediately after approve/deny
+                    HStack(spacing: 4) {
+                        Image(systemName: result == .approved ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(result == .approved ? Color.successColor : Color.errorColor)
+                        Text(result == .approved ? "Approved" : "Declined")
+                            .font(.caption)
+                            .foregroundStyle(result == .approved ? Color.successColor : Color.errorColor)
+                    }
+                    .padding(.top, 4)
                 }
             }
             
@@ -350,8 +354,13 @@ struct NotificationRow: View {
                     Button {
                         isActioning = true
                         Task {
-                            defer { isActioning = false }
-                            await onApprove()
+                            do {
+                                try await onApprove()
+                                actionResult = .approved
+                            } catch {
+                                // error surfaced by the caller via alert
+                            }
+                            isActioning = false
                         }
                     } label: {
                         Text("Approve")
@@ -369,8 +378,13 @@ struct NotificationRow: View {
                     Button {
                         isActioning = true
                         Task {
-                            defer { isActioning = false }
-                            await onDeny()
+                            do {
+                                try await onDeny()
+                                actionResult = .denied
+                            } catch {
+                                // error surfaced by the caller via alert
+                            }
+                            isActioning = false
                         }
                     } label: {
                         Text("Deny")
