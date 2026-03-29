@@ -16,6 +16,7 @@ struct NotificationsView: View {
     @State private var joinRequestActionError: String?
     @State private var showingJoinRequestError = false
     @State private var navigatingToUserId: String? = nil
+    @State private var navigatingToGroupId: String? = nil
     
     var body: some View {
         Group {
@@ -38,6 +39,14 @@ struct NotificationsView: View {
         )) {
             if let userId = navigatingToUserId {
                 UserProfileView(userId: userId)
+            }
+        }
+        .navigationDestination(isPresented: Binding(
+            get: { navigatingToGroupId != nil },
+            set: { if !$0 { navigatingToGroupId = nil } }
+        )) {
+            if let groupId = navigatingToGroupId {
+                GroupDetailView(groupId: groupId)
             }
         }
         .toolbar {
@@ -99,12 +108,19 @@ struct NotificationsView: View {
     }
     
     private func notificationRow(for notification: APINotification) -> some View {
-        // Determine if this notification taps through to a user profile.
-        // Both "follow" and "group_joined" carry relatedEntity { type: "user", id: userId }.
+        let entity = notification.relatedEntity
+        
+        // "follow" + admin's "new member" notification: relatedEntity.type == "user"
         let navigateToUserId: String? = {
-            guard let entity = notification.relatedEntity, entity.type == "user" else { return nil }
+            guard entity?.type == "user" else { return nil }
             guard notification.type == "follow" || notification.type == "group_joined" else { return nil }
-            return entity.id
+            return entity?.id
+        }()
+        
+        // Joiner's approval notification: group_joined with relatedEntity.type == "group"
+        let navigateToGroupId: String? = {
+            guard notification.type == "group_joined", entity?.type == "group" else { return nil }
+            return entity?.id
         }()
         
         if notification.type == "group_join_request" {
@@ -120,6 +136,14 @@ struct NotificationsView: View {
                 onTap: {
                     await markAsRead(id: notification.id)
                     navigatingToUserId = userId
+                }
+            ))
+        } else if let groupId = navigateToGroupId {
+            return AnyView(NotificationRow(
+                notification: notification,
+                onTap: {
+                    await markAsRead(id: notification.id)
+                    navigatingToGroupId = groupId
                 }
             ))
         } else {
@@ -194,21 +218,24 @@ struct NotificationsView: View {
     }
     
     /// Handles approve/deny for a group_join_request notification.
+    /// relatedEntity.id carries "groupId:requestId" — split on ':' to get both.
     /// Throws on failure so the row doesn't transition to confirmed state.
     private func handleJoinRequest(notification: APINotification, approve: Bool) async throws {
         guard let entity = notification.relatedEntity else { return }
-        let groupId = entity.id
+        
+        // Entity id is "groupId:requestId" encoded by the backend
+        let parts = entity.id.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return }
+        let groupId = parts[0]
+        let requestId = parts[1]
         
         do {
             try? await notificationService.markAsRead(id: notification.id)
-            try await groupService.fetchJoinRequests(groupId: groupId)
-            
-            guard let request = groupService.currentGroupJoinRequests.first else { return }
             
             if approve {
-                try await groupService.approveJoinRequest(groupId: groupId, requestId: request.id)
+                try await groupService.approveJoinRequest(groupId: groupId, requestId: requestId)
             } else {
-                try await groupService.denyJoinRequest(groupId: groupId, requestId: request.id)
+                try await groupService.denyJoinRequest(groupId: groupId, requestId: requestId)
             }
             
             // Refresh in background — row already shows confirmed state locally
@@ -216,7 +243,7 @@ struct NotificationsView: View {
         } catch {
             joinRequestActionError = error.localizedDescription
             showingJoinRequestError = true
-            throw error  // re-throw so the row stays in pending state
+            throw error
         }
     }
 }
@@ -240,15 +267,23 @@ struct NotificationRow: View {
     /// For "follow" and "group_joined": relatedEntity is { type: "user" }, title is the name.
     /// For "group_join_request": relatedEntity is { type: "group" }, but actorImageUrl is set
     /// and title is the requester's name.
+    /// Returns a display name used to drive the AvatarView slot.
+    /// Non-nil = show AvatarView (with actorImageUrl if available, initials fallback).
+    /// nil     = show the system SF Symbol icon instead.
     private var personName: String? {
         switch notification.type {
         case "follow":
+            // Title is the follower's name; actorImageUrl is their photo
             return notification.title
         case "group_joined":
-            guard notification.relatedEntity?.type == "user" else { return nil }
+            // Two sub-cases:
+            //   admin's notification: relatedEntity.type == "user" (new member joined)
+            //   joiner's notification: relatedEntity.type == "group" (request approved)
+            // Both carry actorImageUrl — person photo or group image respectively.
+            // title is the person's name or the group's name.
             return notification.title
         case "group_join_request":
-            // title is the requester's name (set by backend)
+            // Title is the requester's name; actorImageUrl is their photo
             return notification.title
         default:
             return nil

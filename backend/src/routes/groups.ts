@@ -803,8 +803,8 @@ groups.post('/:id/join', authMiddleware, async (c) => {
         'group_join_request',
         requesterName,
         `wants to join ${group.name}`,
-        'group',
-        groupId,
+        'join_request',
+        `${groupId}:${requestId}`,   // "groupId:requestId" — split on ':' in iOS
         requester?.profile_image_url ?? undefined
       );
     } catch (err) {
@@ -1348,16 +1348,17 @@ groups.post('/:id/requests/:requestId/approve', authMiddleware, async (c) => {
   
   await c.env.DB.batch(batchOps);
   
-  // Notify the approved user
+  // Notify the approved user — include the group image so iOS shows the group avatar
   try {
     await createNotification(
       c.env.DB,
       request.user_id,
       'group_joined',
-      'Welcome to the Group!',
+      group.name,
       `Your request to join ${group.name} has been approved`,
       'group',
-      groupId
+      groupId,
+      group.image_url ?? undefined
     );
   } catch (err) {
     console.error('Failed to notify approved user:', err);
@@ -1380,9 +1381,9 @@ groups.post('/:id/requests/:requestId/deny', authMiddleware, async (c) => {
   }
   
   const group = await c.env.DB
-    .prepare('SELECT name FROM groups WHERE id = ? AND deleted_at IS NULL')
+    .prepare('SELECT name, image_url FROM groups WHERE id = ? AND deleted_at IS NULL')
     .bind(groupId)
-    .first<{ name: string }>();
+    .first<{ name: string; image_url: string | null }>();
   
   if (!group) {
     return errors.notFound(c, 'Group');
@@ -1405,17 +1406,16 @@ groups.post('/:id/requests/:requestId/deny', authMiddleware, async (c) => {
     .bind('denied', currentUserId, now, requestId)
     .run();
   
-  // Optionally notify the denied user (some apps don't do this)
-  // We'll send a notification to be transparent
   try {
     await createNotification(
       c.env.DB,
       request.user_id,
       'group_request_denied',
-      'Join Request Update',
+      group.name,
       `Your request to join ${group.name} was not approved`,
       'group',
-      groupId
+      groupId,
+      group.image_url ?? undefined
     );
   } catch (err) {
     console.error('Failed to notify denied user:', err);

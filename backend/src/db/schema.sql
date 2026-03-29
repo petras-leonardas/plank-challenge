@@ -209,7 +209,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     title TEXT NOT NULL CHECK (length(title) >= 1 AND length(title) <= 200),
     message TEXT NOT NULL CHECK (length(message) >= 1 AND length(message) <= 1000),
     
-    related_entity_type TEXT CHECK (related_entity_type IS NULL OR related_entity_type IN ('user', 'group', 'plank', 'badge')),
+    related_entity_type TEXT CHECK (related_entity_type IS NULL OR related_entity_type IN ('user', 'group', 'plank', 'badge', 'join_request')),
     related_entity_id TEXT,
     -- Profile image URL of the person who triggered the notification (follower, new member, etc.)
     actor_image_url TEXT,
