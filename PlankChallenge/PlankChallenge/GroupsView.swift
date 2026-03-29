@@ -397,17 +397,20 @@ struct CreateGroupView: View {
                 }
                 
                 Section("Group Info") {
-                    LabeledContent("Name") {
-                        TextField("e.g. Office Core Club", text: $groupName)
-                            .multilineTextAlignment(.trailing)
-                    }
-                    .accessibilityLabel("Group name")
-                    
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Description")
+                        Text("Name")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
-                        TextField("Optional", text: $groupDescription, axis: .vertical)
+                        TextField("Give your group a name", text: $groupName)
+                    }
+                    .padding(.vertical, 4)
+                    .accessibilityLabel("Group name")
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Description (optional)")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        TextField("Tell the world about your group", text: $groupDescription, axis: .vertical)
                             .lineLimit(2...5)
                     }
                     .padding(.vertical, 4)
