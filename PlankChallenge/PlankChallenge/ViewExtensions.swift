@@ -107,25 +107,20 @@ extension Color {
     // Each phase has a bottom gradient color and a matching button glow color (lighter/brighter).
     
     /// Bottom gradient colors for each phase (top is always plankGradientStart).
-    /// Colors are chosen to be visually distinct from one another — spread across
-    /// the blue family from electric blue → indigo → teal → cyan → sky → sapphire.
+    /// Pastel cycle: blue → yellow → green → pink → back to blue.
     static let plankPhaseBottomColors: [Color] = [
-        Color(red:   0/255, green: 102/255, blue: 255/255), // Phase 0: Electric blue  #0066FF
-        Color(red:  80/255, green:   0/255, blue: 220/255), // Phase 1: Deep indigo    #5000DC
-        Color(red:   0/255, green: 180/255, blue: 180/255), // Phase 2: Vivid teal     #00B4B4
-        Color(red:   0/255, green: 160/255, blue: 255/255), // Phase 3: Sky blue       #00A0FF
-        Color(red:  20/255, green:   0/255, blue: 180/255), // Phase 4: True sapphire  #1400B4
-        Color(red:   0/255, green: 200/255, blue: 220/255), // Phase 5: Bright cyan    #00C8DC
+        Color(red:  80/255, green: 140/255, blue: 255/255), // Phase 0: Pastel blue    #508CFF
+        Color(red: 220/255, green: 200/255, blue:  80/255), // Phase 1: Pastel yellow  #DCC850
+        Color(red:  80/255, green: 200/255, blue: 140/255), // Phase 2: Pastel green   #50C88C
+        Color(red: 230/255, green: 110/255, blue: 170/255), // Phase 3: Pastel pink    #E66EAA
     ]
     
-    /// Button glow colors for each phase — lighter/brighter version tracking the bottom hue
+    /// Button glow colors for each phase — slightly brighter version of the bottom hue
     static let plankPhaseGlowColors: [Color] = [
-        Color(red:   0/255, green: 150/255, blue: 255/255), // Phase 0: Sky blue       #0096FF
-        Color(red: 130/255, green:  60/255, blue: 255/255), // Phase 1: Bright indigo  #823CFF
-        Color(red:   0/255, green: 220/255, blue: 220/255), // Phase 2: Bright teal    #00DCDC
-        Color(red:  60/255, green: 190/255, blue: 255/255), // Phase 3: Light sky      #3CBEFF
-        Color(red:  70/255, green:  60/255, blue: 255/255), // Phase 4: Periwinkle     #463CFF
-        Color(red:  60/255, green: 230/255, blue: 250/255), // Phase 5: Ice cyan       #3CE6FA
+        Color(red: 120/255, green: 170/255, blue: 255/255), // Phase 0: Soft blue      #78AAFF
+        Color(red: 245/255, green: 225/255, blue: 110/255), // Phase 1: Soft yellow    #F5E16E
+        Color(red: 110/255, green: 230/255, blue: 170/255), // Phase 2: Soft green     #6EE6AA
+        Color(red: 250/255, green: 150/255, blue: 200/255), // Phase 3: Soft pink      #FA96C8
     ]
     
     /// Completed button glow color (green)
