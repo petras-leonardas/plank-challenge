@@ -67,7 +67,7 @@ git commit -m "description"
 git push
 ```
 
-Commit after each logical fix, not only at end of session. Never commit `UserInterfaceState.xcuserstate` — it is git-ignored and must stay that way.
+**After every successful build and deploy, commit and push immediately. Do not let changes accumulate across multiple fixes in a session.** If you are unsure whether to commit, commit. Use `/done` to handle this automatically — it inspects the current git status, writes a commit message, and pushes in one step.
 
 ---
 

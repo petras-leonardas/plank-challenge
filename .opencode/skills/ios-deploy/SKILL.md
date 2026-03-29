@@ -94,7 +94,9 @@ The editor LSP frequently shows false "Cannot find type" errors in Swift files b
 
 ## After deploying — commit and push
 
-Once the build is verified on device, stage and commit the changed files:
+Once the install is confirmed on device, immediately commit and push. Run `/done` to handle this automatically — it inspects the current git status, writes a commit message, and pushes in one step.
+
+Or manually:
 
 ```bash
 cd "/Users/lbaceviciuscloudflare.com/Developer/Personal projects/plank-challenge" && \
@@ -103,4 +105,4 @@ git commit -m "<description of what changed>" && \
 git push
 ```
 
-Never commit `UserInterfaceState.xcuserstate` — it is git-ignored. Commit after each logical fix, not only at end of session.
+Never commit `UserInterfaceState.xcuserstate` — it is git-ignored. **Do not move on to the next fix without committing first.**
