@@ -356,8 +356,7 @@ struct CreateGroupView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // Photo picker — its own section so the card background
-                // doesn't clip the first text field below it
+                // Photo picker — centred above the form fields in its own section
                 Section {
                     HStack {
                         Spacer()
@@ -404,9 +403,15 @@ struct CreateGroupView: View {
                     }
                     .accessibilityLabel("Group name")
                     
-                    TextField("Description (optional)", text: $groupDescription, axis: .vertical)
-                        .lineLimit(3...6)
-                        .accessibilityLabel("Group description, optional")
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Description")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        TextField("Optional", text: $groupDescription, axis: .vertical)
+                            .lineLimit(2...5)
+                    }
+                    .padding(.vertical, 4)
+                    .accessibilityLabel("Group description, optional")
                 }
                 
                 Section {
@@ -434,24 +439,6 @@ struct CreateGroupView: View {
                         CompactErrorView(error.localizedDescription)
                     }
                 }
-                
-                Section {
-                    Button {
-                        Task { await createGroup() }
-                    } label: {
-                        HStack {
-                            Spacer()
-                            if isCreating {
-                                ProgressView()
-                            } else {
-                                Text("Create Group")
-                                    .fontWeight(.semibold)
-                            }
-                            Spacer()
-                        }
-                    }
-                    .disabled(!isValid || isCreating)
-                }
             }
             .navigationTitle("New Group")
             .navigationBarTitleDisplayMode(.inline)
@@ -459,6 +446,16 @@ struct CreateGroupView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                         .disabled(isCreating)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if isCreating {
+                        ProgressView()
+                    } else {
+                        Button("Create Group") {
+                            Task { await createGroup() }
+                        }
+                        .disabled(!isValid)
+                    }
                 }
             }
             .onChange(of: selectedPhotoItem) { _, newItem in
