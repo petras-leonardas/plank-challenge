@@ -11,7 +11,6 @@ struct NotificationsView: View {
     @Environment(\.notificationService) private var notificationService
     @Environment(\.groupService) private var groupService
     
-    @State private var isMarkingAllRead = false
     @State private var isLoadingMore = false
     @State private var joinRequestActionError: String?
     @State private var showingJoinRequestError = false
@@ -49,20 +48,11 @@ struct NotificationsView: View {
                 GroupDetailView(groupId: groupId)
             }
         }
-        .toolbar {
-            if !notificationService.notifications.isEmpty {
-                ToolbarItem(placement: .topBarTrailing) {
-                    if isMarkingAllRead {
-                        ProgressView()
-                    } else if notificationService.unreadCount > 0 {
-                        Button("Mark all as read") {
-                            Task { await markAllAsRead() }
-                        }
-                        .font(.subheadline)
-                        .accessibilityLabel("Mark all notifications as read")
-                    }
-                }
-            }
+        .onDisappear {
+            // Auto-mark all as read when the user leaves the tab.
+            // Dots remain visible while they're on the page; they clear on exit
+            // so everything looks read next time (unless new notifications arrive).
+            Task { try? await notificationService.markAllAsRead() }
         }
         .alert("Couldn't process request", isPresented: $showingJoinRequestError) {
             Button("OK", role: .cancel) {}
@@ -197,17 +187,6 @@ struct NotificationsView: View {
             try await notificationService.markAsRead(id: id)
         } catch {
             // Silently fail for mark as read
-        }
-    }
-    
-    private func markAllAsRead() async {
-        isMarkingAllRead = true
-        defer { isMarkingAllRead = false }
-        
-        do {
-            try await notificationService.markAllAsRead()
-        } catch {
-            // Error is stored in service
         }
     }
     

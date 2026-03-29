@@ -18,8 +18,8 @@ devices.use('*', authMiddleware);
 /** Maximum devices per user to prevent abuse */
 const MAX_DEVICES_PER_USER = 10;
 
-/** Valid platforms */
-const VALID_PLATFORMS = ['ios', 'ipados', 'watchos'] as const;
+/** Valid platforms — must match the D1 CHECK constraint in schema.sql */
+const VALID_PLATFORMS = ['ios', 'android', 'web'] as const;
 
 // ============================================
 // VALIDATION SCHEMAS

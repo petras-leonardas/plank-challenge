@@ -5,6 +5,7 @@ import type { Env, Variables } from '../types/env';
 import type { GroupRecord, GroupMemberRecord, UserRecord, JoinRequestRecord } from '../types/api';
 import { success, errors } from '../utils/response';
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
+import { sendSilentPush } from '../utils/push';
 
 const groups = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -236,7 +237,8 @@ async function createNotification(
   message: string,
   relatedEntityType?: string,
   relatedEntityId?: string,
-  actorImageUrl?: string
+  actorImageUrl?: string,
+  env?: Env
 ): Promise<void> {
   const notificationId = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -258,6 +260,11 @@ async function createNotification(
       now
     )
     .run();
+
+  // Fire silent push to wake the recipient's app and update their badge
+  if (env) {
+    sendSilentPush(env, userId).catch(() => {});
+  }
 }
 
 /**
@@ -271,7 +278,8 @@ async function createNotificationBatch(
   message: string,
   relatedEntityType?: string,
   relatedEntityId?: string,
-  actorImageUrl?: string
+  actorImageUrl?: string,
+  env?: Env
 ): Promise<void> {
   if (userIds.length === 0) return;
   
@@ -301,6 +309,11 @@ async function createNotificationBatch(
   for (let i = 0; i < statements.length; i += BATCH_SIZE) {
     const chunk = statements.slice(i, i + BATCH_SIZE);
     await db.batch(chunk);
+  }
+
+  // Fire silent pushes to all recipients concurrently
+  if (env) {
+    userIds.forEach(userId => sendSilentPush(env, userId).catch(() => {}));
   }
 }
 
@@ -747,7 +760,8 @@ groups.post('/:id/join', authMiddleware, async (c) => {
           `${joinerName} joined ${group.name}`,
           'user',
           userId,
-          joiner?.profile_image_url ?? undefined
+          joiner?.profile_image_url ?? undefined,
+          c.env
         );
       }
     } catch (err) {
@@ -805,7 +819,8 @@ groups.post('/:id/join', authMiddleware, async (c) => {
         `wants to join ${group.name}`,
         'join_request',
         `${groupId}:${requestId}`,   // "groupId:requestId" — split on ':' in iOS
-        requester?.profile_image_url ?? undefined
+        requester?.profile_image_url ?? undefined,
+        c.env
       );
     } catch (err) {
       console.error('Failed to notify admins:', err);
@@ -966,7 +981,9 @@ groups.post('/:id/members/:userId/promote', authMiddleware, async (c) => {
       'Promoted to Admin',
       `You are now an admin of ${group?.name || 'the group'}`,
       'group',
-      groupId
+      groupId,
+      undefined,
+      c.env
     );
   } catch (err) {
     console.error('Failed to notify promoted user:', err);
@@ -1084,7 +1101,9 @@ groups.delete('/:id/members/:userId', authMiddleware, async (c) => {
       'Removed from Group',
       `You have been removed from ${group.name}`,
       'group',
-      groupId
+      groupId,
+      undefined,
+      c.env
     );
   } catch (err) {
     console.error('Failed to notify removed user:', err);
@@ -1162,7 +1181,9 @@ groups.post('/:id/members/:userId/ban', authMiddleware, async (c) => {
       'Banned from Group',
       `You have been banned from ${group.name}`,
       'group',
-      groupId
+      groupId,
+      undefined,
+      c.env
     );
   } catch (err) {
     console.error('Failed to notify banned user:', err);
@@ -1358,7 +1379,8 @@ groups.post('/:id/requests/:requestId/approve', authMiddleware, async (c) => {
       `Your request to join ${group.name} has been approved`,
       'group',
       groupId,
-      group.image_url ?? undefined
+      group.image_url ?? undefined,
+      c.env
     );
   } catch (err) {
     console.error('Failed to notify approved user:', err);
@@ -1415,7 +1437,8 @@ groups.post('/:id/requests/:requestId/deny', authMiddleware, async (c) => {
       `Your request to join ${group.name} was not approved`,
       'group',
       groupId,
-      group.image_url ?? undefined
+      group.image_url ?? undefined,
+      c.env
     );
   } catch (err) {
     console.error('Failed to notify denied user:', err);

@@ -5,6 +5,7 @@ import type { Env, Variables } from '../types/env';
 import type { UserRecord } from '../types/api';
 import { success, errors } from '../utils/response';
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
+import { sendSilentPush } from '../utils/push';
 
 const users = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -531,6 +532,7 @@ users.post('/:id/follow', authMiddleware, async (c) => {
   // Create notification for the followed user (non-blocking)
   try {
     await createFollowNotification(c.env.DB, currentUserId, targetUserId, followerDisplayName, followerImageUrl);
+    sendSilentPush(c.env, targetUserId).catch(() => {});
   } catch (notificationError) {
     // Log but don't fail the follow operation
     console.error('Failed to create follow notification:', notificationError);

@@ -37,6 +37,21 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         #endif
     }
     
+    /// Called when a silent push (content-available: 1) is received.
+    /// The backend sends these whenever a new notification is created for the user.
+    /// We use it to refresh the unread count and update the tab badge without
+    /// requiring the user to open the app manually.
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        Task {
+            await InAppNotificationService.shared.fetchUnreadCount()
+            completionHandler(.newData)
+        }
+    }
+    
     /// Handles the OAuth redirect URL from Google Sign-In.
     /// The Google SDK intercepts the URL if it matches the reversed client ID scheme.
     func application(

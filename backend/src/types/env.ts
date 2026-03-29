@@ -29,6 +29,12 @@ export interface Env {
   // Required for production, optional for development (dev bypass enabled)
   APPLE_CLIENT_ID?: string;   // Your iOS app Bundle ID (e.g., "com.plankchallenge.app")
   GOOGLE_CLIENT_ID?: string;  // Your Google OAuth Client ID
+
+  // APNs secrets (set via wrangler secret put)
+  APNS_KEY_ID: string;        // 10-char key ID from Apple Developer portal
+  APNS_TEAM_ID: string;       // 10-char Apple Developer Team ID
+  APNS_BUNDLE_ID: string;     // iOS app bundle ID (com.leo.PlankChallenge)
+  APNS_PRIVATE_KEY: string;   // Full contents of the .p8 private key file
 }
 
 /**

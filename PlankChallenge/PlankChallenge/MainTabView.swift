@@ -10,6 +10,8 @@ import SwiftUI
 struct MainTabView: View {
     @State private var selectedTab = 0
     @Environment(\.notificationService) private var notificationService
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.authService) private var authService
     
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -47,6 +49,18 @@ struct MainTabView: View {
                 .tag(4)
         }
         .tint(Color.appAccent)
+        .onChange(of: selectedTab) { _, tab in
+            // Refresh unread count whenever the Notifications tab is selected
+            if tab == 3 {
+                Task { await notificationService.fetchUnreadCount() }
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Refresh unread count every time the app comes to the foreground
+            if phase == .active, case .authenticated = authService.state {
+                Task { await notificationService.fetchUnreadCount() }
+            }
+        }
     }
 }
 
