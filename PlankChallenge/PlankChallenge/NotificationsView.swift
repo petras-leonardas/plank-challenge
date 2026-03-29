@@ -379,12 +379,14 @@ struct NotificationRow: View {
                 ProgressView()
                     .scaleEffect(0.8)
                 Text("Processing...")
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            .padding(.top, 6)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .padding(.top, 8)
         } else {
-            HStack(spacing: 8) {
+            HStack(spacing: 12) {
                 if let onApprove {
                     Button {
                         isActioning = true
@@ -399,12 +401,12 @@ struct NotificationRow: View {
                         }
                     } label: {
                         Text("Approve")
-                            .font(.caption)
+                            .font(.subheadline)
                             .fontWeight(.semibold)
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.successColor, in: Capsule())
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(Color.successColor, in: RoundedRectangle(cornerRadius: 10))
                     }
                     .accessibilityLabel("Approve join request")
                 }
@@ -422,18 +424,18 @@ struct NotificationRow: View {
                             isActioning = false
                         }
                     } label: {
-                        Text("Deny")
-                            .font(.caption)
+                        Text("Decline")
+                            .font(.subheadline)
                             .fontWeight(.semibold)
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.errorColor, in: Capsule())
+                            .foregroundStyle(Color.errorColor)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(Color.errorColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
                     }
-                    .accessibilityLabel("Deny join request")
+                    .accessibilityLabel("Decline join request")
                 }
             }
-            .padding(.top, 6)
+            .padding(.top, 10)
         }
     }
     
