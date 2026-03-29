@@ -391,6 +391,8 @@ struct GroupSettingsView: View {
             if let image = selectedImage {
                 let newImageUrl = try await mediaService.uploadGroupImage(groupId: groupId, image: image)
                 groupService.updateGroupImage(groupId: groupId, imageUrl: newImageUrl)
+                // Refresh the full groups list so the list card reflects the new image
+                try? await groupService.fetchMyGroups()
             }
 
             dismiss()
