@@ -56,9 +56,7 @@ struct GroupsView: View {
                 CreateGroupView()
             }
             .task {
-                if !groupService.hasLoaded {
-                    await loadData()
-                }
+                await loadData()
             }
         }
     }

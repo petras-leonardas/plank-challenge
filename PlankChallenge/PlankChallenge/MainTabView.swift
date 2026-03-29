@@ -10,6 +10,7 @@ import SwiftUI
 struct MainTabView: View {
     @State private var selectedTab = 0
     @Environment(\.notificationService) private var notificationService
+    @Environment(\.groupService) private var groupService
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.authService) private var authService
     
@@ -69,9 +70,15 @@ struct MainTabView: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in
-            // Refresh unread count every time the app comes to the foreground
+            // Refresh key data every time the app returns to the foreground.
+            // This acts as a safety net for silent pushes that were throttled or
+            // missed while the app was suspended.
             if phase == .active, case .authenticated = authService.state {
-                Task { await notificationService.fetchUnreadCount() }
+                Task {
+                    await notificationService.fetchUnreadCount()
+                    try? await groupService.fetchMyGroups()
+                    try? await groupService.fetchDiscoverGroups()
+                }
             }
         }
     }
