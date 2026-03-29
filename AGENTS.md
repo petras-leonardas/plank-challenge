@@ -154,6 +154,10 @@ Key rules to know without reading the full doc:
 - **Empty state pattern:** factual heading + warm/actionable one-liner. Never blame the user for the state being empty.
 - Capitalisation: primary action buttons are Title Case (`"Save Changes"`), everything else the user reads is sentence case (`"Your streak is waiting."`).
 
+### Code style
+
+Write comments only when they add information the code itself cannot convey — explain *why*, not *what*. Do not comment every line or restate what the code obviously does. `// Set isLoading to true` above `isLoading = true` is noise, not documentation. `// MARK: -` section headers are fine in longer files.
+
 ### Adding a new service
 1. Define the protocol in `ServiceProtocols.swift`
 2. Implement `@Observable @MainActor class MyService: MyServiceProtocol`
