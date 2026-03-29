@@ -3,7 +3,20 @@
  *
  * Sends a content-available silent push to all registered devices for a user.
  * Silent pushes (no alert, no sound, content-available: 1) wake the app in the
- * background so it can call fetchUnreadCount() and update the tab badge.
+ * background so it can fetch fresh data and update the UI without the user
+ * having to pull-to-refresh.
+ *
+ * Payload shape:
+ *   { aps: { "content-available": 1 }, refreshType: ["notifications", "groups", ...] }
+ *
+ * The `refreshType` array tells the iOS app which data to re-fetch. Multiple
+ * types can be combined in a single push to avoid redundant wakeups. Supported
+ * values (iOS reads these in AppDelegate):
+ *   "notifications" — re-fetch unread count + notification list
+ *   "groups"        — re-fetch the user's group list
+ *   "leaderboard"   — re-fetch the global leaderboard
+ *   "badges"        — re-fetch earned badges
+ *   "planks"        — re-fetch today's plank state
  *
  * Auth uses a JWT signed with ES256 (provider token auth — no per-device cert needed).
  * The jose library handles JWT signing; it's already a project dependency.
@@ -59,13 +72,19 @@ async function getApnsJwt(env: Env): Promise<string> {
 }
 
 /**
- * Sends a silent push notification to all registered devices for a user.
+ * Sends a typed silent push notification to all registered devices for a user.
  * Fires and forgets — errors are logged but never thrown.
  *
- * @param env   Worker environment (needs APNS_* secrets + DB)
- * @param userId  The recipient's user ID
+ * @param env          Worker environment (needs APNS_* secrets + DB)
+ * @param userId       The recipient's user ID
+ * @param refreshTypes Which data the iOS app should re-fetch on receipt.
+ *                     Defaults to ["notifications"] for backwards compatibility.
  */
-export async function sendSilentPush(env: Env, userId: string): Promise<void> {
+export async function sendSilentPush(
+  env: Env,
+  userId: string,
+  refreshTypes: string[] = ['notifications'],
+): Promise<void> {
   try {
     // Fetch all device tokens for this user
     const result = await env.DB
@@ -87,6 +106,7 @@ export async function sendSilentPush(env: Env, userId: string): Promise<void> {
       aps: {
         'content-available': 1,
       },
+      refreshType: refreshTypes,
     });
 
     // Send to all devices concurrently

@@ -230,7 +230,13 @@ async function isGroupAdmin(
 }
 
 /**
- * Create a notification for a user
+ * Create a notification for a user.
+ *
+ * @param extraRefreshTypes  Additional refreshType values to include alongside
+ *                           "notifications" in the silent push payload. Use this
+ *                           when the triggering event also requires the recipient
+ *                           to refresh other data (e.g. group approval → also
+ *                           refresh "groups").
  */
 async function createNotification(
   db: D1Database,
@@ -241,7 +247,8 @@ async function createNotification(
   relatedEntityType?: string,
   relatedEntityId?: string,
   actorImageUrl?: string,
-  env?: Env
+  env?: Env,
+  extraRefreshTypes: string[] = [],
 ): Promise<void> {
   const notificationId = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -264,14 +271,18 @@ async function createNotification(
     )
     .run();
 
-  // Fire silent push to wake the recipient's app and update their badge
+  // Fire silent push, merging any extra refresh types with the default "notifications"
   if (env) {
-    sendSilentPush(env, userId).catch(() => {});
+    const refreshTypes = ['notifications', ...extraRefreshTypes];
+    sendSilentPush(env, userId, refreshTypes).catch(() => {});
   }
 }
 
 /**
- * Create notifications for multiple users in a single batch
+ * Create notifications for multiple users in a single batch.
+ *
+ * @param extraRefreshTypes  Additional refreshType values to include alongside
+ *                           "notifications" in every recipient's silent push.
  */
 async function createNotificationBatch(
   db: D1Database,
@@ -282,7 +293,8 @@ async function createNotificationBatch(
   relatedEntityType?: string,
   relatedEntityId?: string,
   actorImageUrl?: string,
-  env?: Env
+  env?: Env,
+  extraRefreshTypes: string[] = [],
 ): Promise<void> {
   if (userIds.length === 0) return;
   
@@ -314,9 +326,10 @@ async function createNotificationBatch(
     await db.batch(chunk);
   }
 
-  // Fire silent pushes to all recipients concurrently
+  // Fire silent pushes to all recipients, merging any extra refresh types
   if (env) {
-    userIds.forEach(userId => sendSilentPush(env, userId).catch(() => {}));
+    const refreshTypes = ['notifications', ...extraRefreshTypes];
+    userIds.forEach(userId => sendSilentPush(env, userId, refreshTypes).catch(() => {}));
   }
 }
 
@@ -405,6 +418,10 @@ groups.post('/', authMiddleware, zValidator('json', createGroupSchema), async (c
   if (!group) {
     return errors.serverError(c, 'Failed to retrieve created group');
   }
+
+  // Push a "groups" refresh to the creator's other devices so the new group
+  // appears immediately without requiring a pull-to-refresh.
+  sendSilentPush(c.env, userId, ['groups']).catch(() => {});
   
   return success(c, formatGroup(group, { isMember: true, role: 'owner' }), 201);
 });
@@ -795,6 +812,10 @@ groups.post('/:id/join', authMiddleware, async (c) => {
       console.error('Failed to notify admins of new member:', err);
     }
 
+    // Push a "groups" refresh to the joiner's other devices so the new group
+    // appears in their list immediately without a pull-to-refresh.
+    sendSilentPush(c.env, userId, ['groups']).catch(() => {});
+
     return success(c, { 
       joined: true, 
       status: 'active',
@@ -903,6 +924,10 @@ groups.post('/:id/leave', authMiddleware, async (c) => {
     console.error('Failed to leave group:', error);
     return errors.serverError(c, 'Failed to leave group');
   }
+
+  // Push a "groups" refresh to the user's other devices so the group
+  // disappears from their list immediately without a pull-to-refresh.
+  sendSilentPush(c.env, userId, ['groups']).catch(() => {});
   
   return success(c, { left: true });
 });
@@ -1199,7 +1224,8 @@ groups.post('/:id/members/:userId/ban', authMiddleware, async (c) => {
     return errors.serverError(c, 'Failed to ban member');
   }
   
-  // Notify the banned user
+  // Notify the banned user — include "groups" refresh so the group disappears
+  // from their list immediately without requiring a pull-to-refresh.
   try {
     await createNotification(
       c.env.DB,
@@ -1210,7 +1236,8 @@ groups.post('/:id/members/:userId/ban', authMiddleware, async (c) => {
       'group',
       groupId,
       undefined,
-      c.env
+      c.env,
+      ['groups'],
     );
   } catch (err) {
     console.error('Failed to notify banned user:', err);
@@ -1396,7 +1423,8 @@ groups.post('/:id/requests/:requestId/approve', authMiddleware, async (c) => {
   
   await c.env.DB.batch(batchOps);
   
-  // Notify the approved user — include the group image so iOS shows the group avatar
+  // Notify the approved user — include "groups" refresh so the new group
+  // appears in their list immediately alongside the notification.
   try {
     await createNotification(
       c.env.DB,
@@ -1407,7 +1435,8 @@ groups.post('/:id/requests/:requestId/approve', authMiddleware, async (c) => {
       'group',
       groupId,
       group.image_url ?? undefined,
-      c.env
+      c.env,
+      ['groups'],
     );
   } catch (err) {
     console.error('Failed to notify approved user:', err);
@@ -1554,6 +1583,10 @@ groups.post('/join/:inviteCode', authMiddleware, async (c) => {
   }
   
   await c.env.DB.batch(batchOps);
+
+  // Push a "groups" refresh to the joiner's other devices so the new group
+  // appears in their list immediately without a pull-to-refresh.
+  sendSilentPush(c.env, userId, ['groups']).catch(() => {});
   
   return success(c, { 
     joined: true,
