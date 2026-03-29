@@ -855,9 +855,9 @@ groups.post('/:id/join', authMiddleware, async (c) => {
       .prepare(`
         INSERT INTO join_requests (id, group_id, user_id, status, created_at)
         VALUES (?, ?, ?, 'pending', ?)
-        ON CONFLICT(group_id, user_id) DO UPDATE SET status = 'pending', created_at = ?
+        ON CONFLICT(group_id, user_id) DO UPDATE SET id = excluded.id, status = 'pending', created_at = excluded.created_at
       `)
-      .bind(requestId, groupId, userId, now, now)
+      .bind(requestId, groupId, userId, now)
       .run();
     
     // Notify group admins and owner (using batch for efficiency)
