@@ -541,11 +541,15 @@ struct PlankTimerView: View {
                             .frame(width: baseButtonSize + 30, height: baseButtonSize + 30)
                     }
                     
-                    // Main button circle
+                    // Main button circle — dark base ensures white text/logo stays readable
+                    // regardless of which pastel phase the background is on
+                    Circle()
+                        .fill(Color(red: 10/255, green: 22/255, blue: 40/255).opacity(0.72))
+                        .frame(width: baseButtonSize, height: baseButtonSize)
                     Circle()
                         .fill(
                             RadialGradient(
-                                colors: [currentGlowColor, currentGlowColor.opacity(0.7)],
+                                colors: [currentGlowColor.opacity(0.45), currentGlowColor.opacity(0.2)],
                                 center: .center,
                                 startRadius: 0,
                                 endRadius: baseButtonSize / 2
@@ -1046,13 +1050,13 @@ struct PlankTimerView: View {
                     let nextGlow = Color.plankPhaseGlowColors[phase]
                     // Animate the color change on the main actor
                     await MainActor.run {
-                        withAnimation(.linear(duration: 30)) {
+                        withAnimation(.linear(duration: 20)) {
                             currentBottomColor = nextBottom
                             currentGlowColor = nextGlow
                         }
                     }
-                    // Wait exactly 30s before starting the next transition
-                    try await Task.sleep(nanoseconds: 30_000_000_000)
+                    // Wait exactly 20s before starting the next transition
+                    try await Task.sleep(nanoseconds: 20_000_000_000)
                 }
             } catch {
                 // Task cancelled on cleanup — nothing to do
