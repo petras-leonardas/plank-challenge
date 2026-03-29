@@ -208,6 +208,18 @@ struct PlankTimerView: View {
                         .transition(.opacity)
                 }
                 
+                // Activity ticker — shown below the button only in completedToday state
+                if timerState == .completedToday {
+                    let tickerEntries = activityTickerEntries
+                    ActivityTickerView(entries: tickerEntries)
+                        .frame(width: geometry.size.width - 60, height: 130)
+                        .position(
+                            x: geometry.size.width / 2,
+                            y: centerY + (baseButtonSize / 2) + 90
+                        )
+                        .transition(.opacity)
+                }
+                
                 // Top bar overlay - fixed at top
                 // Only shown in .ready state — in .completedToday the day is done,
                 // so the manual entry button is hidden (one plank per day).
@@ -239,6 +251,10 @@ struct PlankTimerView: View {
             selectedMinutes = storedGoalSeconds / 60
             selectedSeconds = storedGoalSeconds % 60
             startGradientCycle()
+            // If already in completedToday (e.g. returning to tab), load ticker data
+            if timerState == .completedToday {
+                fetchActivityTickerData()
+            }
         }
         .onDisappear {
             cleanup()
@@ -254,6 +270,12 @@ struct PlankTimerView: View {
             // stopPlank() would fire twice.
             guard reached, timerState == .active else { return }
             stopPlank()
+        }
+        .onChange(of: timerState) { _, newState in
+            // Fetch activity ticker data when entering the completedToday state
+            if newState == .completedToday {
+                fetchActivityTickerData()
+            }
         }
         .onChange(of: todayPlankCount) { oldValue, newValue in
             // If all planks were deleted (from Settings), transition back to ready state
@@ -630,11 +652,14 @@ struct PlankTimerView: View {
                 .foregroundStyle(.white)
             
         case .completedToday:
-            // Show checkmark and today's plank time — one plank per day
-            VStack(spacing: 8) {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.9))
+            // Small app logo at top, time centered as the hero element
+            VStack(spacing: 0) {
+                Image("AppLogoWhite")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 28, height: 28)
+                    .opacity(0.7)
+                    .padding(.bottom, 10)
                 
                 Text(formattedLastPlank)
                     .font(.system(size: 44, weight: .bold, design: .monospaced))
@@ -660,6 +685,34 @@ struct PlankTimerView: View {
         let minutes = totalSeconds / 60
         let seconds = totalSeconds % 60
         return String(format: "%02d:%02d", minutes, seconds)
+    }
+    
+    // MARK: - Activity Ticker
+    
+    /// Builds the list of entries for the social activity ticker.
+    /// Prefers the following leaderboard; falls back to the global leaderboard.
+    private var activityTickerEntries: [ActivityTickerEntry] {
+        let following = leaderboardService.followingLeaderboard.filter { !$0.isCurrentUser }
+        let source: [APILeaderboardEntry] = following.isEmpty
+            ? leaderboardService.globalLeaderboard.filter { !$0.isCurrentUser }
+            : following
+        return source.map { entry in
+            ActivityTickerEntry(
+                name: entry.user.displayName,
+                label: entry.scoreLabel
+            )
+        }
+    }
+    
+    /// Fetches leaderboard data for the activity ticker when entering completedToday state.
+    /// Fetches following leaderboard first; if empty, fetches global as fallback.
+    private func fetchActivityTickerData() {
+        Task {
+            try? await leaderboardService.fetchFollowingLeaderboard(type: .streak, period: .weekly)
+            if leaderboardService.followingLeaderboard.filter({ !$0.isCurrentUser }).isEmpty {
+                try? await leaderboardService.fetchGlobalLeaderboard(type: .streak, period: .weekly, limit: 20)
+            }
+        }
     }
     // MARK: - Mode Selector
     
@@ -1128,6 +1181,112 @@ struct AnimatedFlameIcon: View {
             .repeatForever(autoreverses: true)
         ) {
             glowOpacity = 0.8
+        }
+    }
+}
+
+// MARK: - Activity Ticker
+
+/// A single entry displayed in the social activity ticker
+struct ActivityTickerEntry: Identifiable {
+    let id = UUID()
+    let name: String
+    let label: String
+}
+
+/// Star-Wars-crawl style upward scrolling ticker of friends' recent plank activity.
+/// White text with opacity fade masks at top and bottom edges.
+/// Loops continuously as long as the view is shown.
+struct ActivityTickerView: View {
+    let entries: [ActivityTickerEntry]
+    
+    // How tall each text line is (line height + spacing)
+    private let lineHeight: CGFloat = 28
+    // Seconds per line — controls scroll speed
+    private let secondsPerLine: Double = 3.5
+    
+    @State private var offset: CGFloat = 0
+    @State private var scrollTask: Task<Void, Never>?
+    
+    var body: some View {
+        GeometryReader { geo in
+            let visibleHeight = geo.size.height
+            
+            ZStack(alignment: .top) {
+                // Scrolling content
+                if entries.isEmpty {
+                    // No data yet — show a placeholder
+                    Text("Loading activity...")
+                        .font(.subheadline)
+                        .fontWeight(.light)
+                        .foregroundStyle(.white.opacity(0.5))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    // Duplicate entries so the scroll loops seamlessly
+                    let doubled = entries + entries
+                    VStack(spacing: 0) {
+                        ForEach(doubled) { entry in
+                            Text("\(entry.name)  ·  \(entry.label)")
+                                .font(.subheadline)
+                                .fontWeight(.light)
+                                .foregroundStyle(.white.opacity(0.75))
+                                .frame(height: lineHeight)
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .offset(y: offset)
+                }
+            }
+            .frame(width: geo.size.width, height: visibleHeight)
+            .clipped()
+            // Gradient mask: fade at top and bottom
+            .mask(
+                LinearGradient(
+                    colors: [.clear, .black, .black, .clear],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .onAppear {
+                guard !entries.isEmpty else { return }
+                let totalHeight = CGFloat(entries.count) * lineHeight
+                // Start just off the bottom edge
+                offset = visibleHeight
+                startScrolling(totalHeight: totalHeight, visibleHeight: visibleHeight)
+            }
+            .onDisappear {
+                scrollTask?.cancel()
+                scrollTask = nil
+            }
+        }
+    }
+    
+    private func startScrolling(totalHeight: CGFloat, visibleHeight: CGFloat) {
+        scrollTask?.cancel()
+        scrollTask = Task {
+            do {
+                // Scroll upward one line at a time, looping on the duplicated list
+                while !Task.isCancelled {
+                    let durationNs = UInt64(secondsPerLine * 1_000_000_000)
+                    try await Task.sleep(nanoseconds: durationNs)
+                    await MainActor.run {
+                        withAnimation(.linear(duration: secondsPerLine)) {
+                            offset -= lineHeight
+                        }
+                    }
+                    // When we've scrolled through the first copy, reset to start
+                    // seamlessly (the second copy is identical so the jump is invisible)
+                    if abs(offset) >= totalHeight {
+                        try await Task.sleep(nanoseconds: UInt64(secondsPerLine * 1_000_000_000))
+                        await MainActor.run {
+                            // Instant reset — no animation, picks up on duplicate
+                            offset = 0
+                        }
+                    }
+                }
+            } catch {
+                // Cancelled — normal on view disappear
+            }
         }
     }
 }
