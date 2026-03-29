@@ -1036,7 +1036,9 @@ groups.post('/:id/members/:userId/promote', authMiddleware, async (c) => {
     .bind('admin', now, groupId, targetUserId)
     .run();
   
-  // Notify the promoted user
+  // Notify the promoted user — include "groups" refresh so their device
+  // immediately re-fetches the group list and gains the invite code and
+  // admin role that the GET /groups response now returns for admins.
   const group = await c.env.DB
     .prepare('SELECT name FROM groups WHERE id = ?')
     .bind(groupId)
@@ -1052,7 +1054,8 @@ groups.post('/:id/members/:userId/promote', authMiddleware, async (c) => {
       'group',
       groupId,
       undefined,
-      c.env
+      c.env,
+      ['groups'],
     );
   } catch (err) {
     console.error('Failed to notify promoted user:', err);

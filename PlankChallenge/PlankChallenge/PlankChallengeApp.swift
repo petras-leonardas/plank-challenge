@@ -71,25 +71,34 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // pushes sent before the typed payload was introduced.
         let refreshTypes = (userInfo["refreshType"] as? [String]) ?? ["notifications"]
 
-        // @MainActor ensures all state mutations on @Observable @MainActor services
-        // happen on the main actor, matching their isolation requirement.
+        // Run all refresh types in parallel to stay well within the 30-second
+        // APNs background execution budget. Each type is an independent network
+        // call — there is no ordering dependency between them.
+        // @MainActor ensures state mutations on @Observable @MainActor services
+        // happen on the correct actor.
         Task { @MainActor in
-            for type in refreshTypes {
-                switch type {
-                case "notifications":
-                    await InAppNotificationService.shared.fetchUnreadCount()
-                    try? await InAppNotificationService.shared.fetchNotifications(force: false)
-                case "groups":
-                    try? await GroupService.shared.fetchMyGroups()
-                    try? await GroupService.shared.fetchDiscoverGroups()
-                case "leaderboard":
-                    try? await LeaderboardService.shared.fetchGlobalLeaderboardBoth()
-                case "badges":
-                    try? await BadgeService.shared.fetchBadges()
-                case "planks":
-                    try? await PlankService.shared.fetchPlanks(refresh: true)
-                default:
-                    break
+            await withTaskGroup(of: Void.self) { group in
+                for type in refreshTypes {
+                    group.addTask { @MainActor in
+                        switch type {
+                        case "notifications":
+                            await InAppNotificationService.shared.fetchUnreadCount()
+                            try? await InAppNotificationService.shared.fetchNotifications(force: false)
+                        case "groups":
+                            // Only refresh the user's own group list — discover is a global
+                            // public listing unaffected by membership events and refreshes
+                            // on tab-tap via GroupsView.task.
+                            try? await GroupService.shared.fetchMyGroups()
+                        case "leaderboard":
+                            try? await LeaderboardService.shared.fetchGlobalLeaderboardBoth()
+                        case "badges":
+                            try? await BadgeService.shared.fetchBadges()
+                        case "planks":
+                            try? await PlankService.shared.fetchPlanks(refresh: true)
+                        default:
+                            break
+                        }
+                    }
                 }
             }
             completionHandler(.newData)
