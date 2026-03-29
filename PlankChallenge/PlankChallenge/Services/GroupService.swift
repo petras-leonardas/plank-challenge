@@ -44,6 +44,9 @@ final class GroupService: GroupServiceProtocol {
     /// The currently viewed group detail
     private(set) var currentGroup: APIGroup?
     
+    /// Pending join requests for the currently viewed group (admin only)
+    private(set) var currentGroupJoinRequests: [APIJoinRequest] = []
+    
     /// Whether a fetch operation is in progress
     private(set) var isLoading = false
     
@@ -330,7 +333,7 @@ final class GroupService: GroupServiceProtocol {
                 imageUrl: imageUrl, groupType: group.groupType, joinMode: group.joinMode,
                 memberCount: group.memberCount, createdBy: group.createdBy,
                 inviteCode: group.inviteCode, createdAt: group.createdAt,
-                updatedAt: group.updatedAt
+                updatedAt: group.updatedAt, pendingRequest: group.pendingRequest
             )
         }
         // Also patch currentGroup if it happens to be the same group
@@ -414,6 +417,7 @@ final class GroupService: GroupServiceProtocol {
         myGroups = []
         discoverGroups = []
         currentGroupMembers = []
+        currentGroupJoinRequests = []
         currentMembershipRole = nil
         currentGroup = nil
         hasLoaded = false
@@ -425,6 +429,85 @@ final class GroupService: GroupServiceProtocol {
         currentGroup = nil
         currentMembershipRole = nil
         currentGroupMembers = []
+        currentGroupJoinRequests = []
+    }
+    
+    // MARK: - Join Requests (Admin)
+    
+    /// Fetches pending join requests for a group (admin only)
+    func fetchJoinRequests(groupId: String) async throws {
+        guard isValidGroupId(groupId) else {
+            let serviceError = GroupServiceError.validationError("Invalid group ID")
+            self.error = serviceError
+            throw serviceError
+        }
+        
+        do {
+            let response: JoinRequestsResponse = try await APIClient.shared.get(
+                "/groups/\(groupId)/requests"
+            )
+            currentGroupJoinRequests = response.requests
+        } catch let apiError as APIClientError {
+            let serviceError = GroupServiceError.fromAPIError(apiError)
+            self.error = serviceError
+            throw serviceError
+        } catch {
+            let serviceError = GroupServiceError.unknown(error.localizedDescription)
+            self.error = serviceError
+            throw serviceError
+        }
+    }
+    
+    /// Approves a pending join request (admin only)
+    func approveJoinRequest(groupId: String, requestId: String) async throws {
+        guard isValidGroupId(groupId), isValidGroupId(requestId) else {
+            let serviceError = GroupServiceError.validationError("Invalid ID")
+            self.error = serviceError
+            throw serviceError
+        }
+        
+        do {
+            let _: JoinLeaveResponse = try await APIClient.shared.post(
+                "/groups/\(groupId)/requests/\(requestId)/approve",
+                body: EmptyGroupBody()
+            )
+            // Remove from local list
+            currentGroupJoinRequests.removeAll { $0.id == requestId }
+        } catch let apiError as APIClientError {
+            let serviceError = GroupServiceError.fromAPIError(apiError)
+            self.error = serviceError
+            throw serviceError
+        } catch {
+            let serviceError = GroupServiceError.unknown(error.localizedDescription)
+            self.error = serviceError
+            throw serviceError
+        }
+    }
+    
+    /// Denies a pending join request (admin only)
+    func denyJoinRequest(groupId: String, requestId: String) async throws {
+        guard isValidGroupId(groupId), isValidGroupId(requestId) else {
+            let serviceError = GroupServiceError.validationError("Invalid ID")
+            self.error = serviceError
+            throw serviceError
+        }
+        
+        do {
+            let _: JoinLeaveResponse = try await APIClient.shared.post(
+                "/groups/\(groupId)/requests/\(requestId)/deny",
+                body: EmptyGroupBody()
+            )
+            // Remove from local list
+            currentGroupJoinRequests.removeAll { $0.id == requestId }
+        } catch let apiError as APIClientError {
+            let serviceError = GroupServiceError.fromAPIError(apiError)
+            self.error = serviceError
+            throw serviceError
+        } catch {
+            let serviceError = GroupServiceError.unknown(error.localizedDescription)
+            self.error = serviceError
+            throw serviceError
+        }
     }
     
     // MARK: - Error Handling

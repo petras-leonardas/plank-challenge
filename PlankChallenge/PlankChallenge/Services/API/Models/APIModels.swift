@@ -660,6 +660,31 @@ struct APIGroup: Decodable, Identifiable, Sendable {
     let inviteCode: String?
     let createdAt: String
     let updatedAt: String
+    /// `true` when the current user has a pending join request for this group.
+    /// Only populated by `/groups/discover` and `/groups/:id` — absent for members.
+    let pendingRequest: Bool?
+}
+
+/// A pending join request for a group (from GET /groups/:id/requests)
+struct APIJoinRequest: Decodable, Identifiable, Sendable {
+    let id: String
+    let userId: String
+    let groupId: String
+    let status: String
+    let createdAt: String
+    let user: RequestUser?
+    
+    struct RequestUser: Decodable, Sendable {
+        let id: String
+        let displayName: String
+        let username: String?
+        let profileImageUrl: String?
+    }
+}
+
+/// Response from GET /groups/:id/requests
+struct JoinRequestsResponse: Decodable {
+    let requests: [APIJoinRequest]
 }
 
 /// Group member model
@@ -736,7 +761,8 @@ struct GroupDetailResponse: Decodable {
             id: id, name: name, description: description,
             imageUrl: imageUrl, groupType: groupType, joinMode: joinMode,
             memberCount: memberCount, createdBy: createdBy,
-            inviteCode: inviteCode, createdAt: createdAt, updatedAt: updatedAt
+            inviteCode: inviteCode, createdAt: createdAt, updatedAt: updatedAt,
+            pendingRequest: nil
         )
     }
     

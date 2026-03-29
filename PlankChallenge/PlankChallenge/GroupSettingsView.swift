@@ -23,6 +23,9 @@ struct GroupSettingsView: View {
     @State private var saveError: Error?
     @State private var deleteError: Error?
     @State private var showingDeleteError = false
+    @State private var joinRequestActionError: String?
+    @State private var showingJoinRequestError = false
+    @State private var isLoadingRequests = false
     
     var body: some View {
         NavigationStack {
@@ -73,10 +76,19 @@ struct GroupSettingsView: View {
         } message: {
             Text(deleteError?.localizedDescription ?? "Something went wrong. Try again.")
         }
+        .alert("Couldn't process request", isPresented: $showingJoinRequestError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(joinRequestActionError ?? "Something went wrong. Try again.")
+        }
         .onAppear {
             // Initialize form when view appears (works even if group already loaded)
             if let group = groupService.currentGroup {
                 initializeForm(from: group)
+            }
+            // Load pending join requests for admins
+            if groupService.isCurrentUserAdmin {
+                Task { await loadJoinRequests() }
             }
         }
         .onChange(of: groupService.currentGroup?.id) { _, newGroupId in
@@ -110,6 +122,12 @@ struct GroupSettingsView: View {
                     Toggle("Require approval to join", isOn: $requiresApproval)
                         .accessibilityHint("When enabled, you'll need to approve each join request")
                 }
+            }
+            
+            // Pending requests — visible to admins only when there are pending requests
+            // or when the group uses request-based joining
+            if groupService.isCurrentUserAdmin && (group.requiresApproval || !groupService.currentGroupJoinRequests.isEmpty) {
+                pendingRequestsSection
             }
             
             Section("Members") {
@@ -167,6 +185,87 @@ struct GroupSettingsView: View {
                 Text("Permanently deletes this group and removes all members. This can't be undone.")
             }
         }
+    }
+    
+    // MARK: - Pending Requests Section
+    
+    @ViewBuilder
+    private var pendingRequestsSection: some View {
+        Section {
+            if isLoadingRequests {
+                HStack {
+                    ProgressView()
+                    Text("Loading requests...")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            } else if groupService.currentGroupJoinRequests.isEmpty {
+                Text("No pending requests")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(groupService.currentGroupJoinRequests) { request in
+                    pendingRequestRow(request)
+                }
+            }
+        } header: {
+            HStack {
+                Text("Pending Requests")
+                if !groupService.currentGroupJoinRequests.isEmpty {
+                    Text("(\(groupService.currentGroupJoinRequests.count))")
+                        .foregroundStyle(Color.appAccent)
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func pendingRequestRow(_ request: APIJoinRequest) -> some View {
+        HStack(spacing: 12) {
+            AvatarView(
+                text: request.user?.displayName ?? "?",
+                imageName: nil,
+                imageUrl: request.user?.profileImageUrl,
+                size: 36
+            )
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(request.user?.displayName ?? "Unknown")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                
+                if let username = request.user?.username {
+                    Text("@\(username)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            
+            Spacer()
+            
+            HStack(spacing: 8) {
+                Button {
+                    Task { await handleRequest(request, approve: true) }
+                } label: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Color.successColor)
+                        .font(.title2)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Approve \(request.user?.displayName ?? "request")")
+                
+                Button {
+                    Task { await handleRequest(request, approve: false) }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(Color.errorColor)
+                        .font(.title2)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Deny \(request.user?.displayName ?? "request")")
+            }
+        }
+        .padding(.vertical, 2)
     }
     
     // MARK: - Helpers
@@ -238,6 +337,29 @@ struct GroupSettingsView: View {
         } catch {
             deleteError = error
             showingDeleteError = true
+        }
+    }
+    
+    private func loadJoinRequests() async {
+        isLoadingRequests = true
+        defer { isLoadingRequests = false }
+        do {
+            try await groupService.fetchJoinRequests(groupId: groupId)
+        } catch {
+            // Non-critical — silently fail, section stays hidden if empty
+        }
+    }
+    
+    private func handleRequest(_ request: APIJoinRequest, approve: Bool) async {
+        do {
+            if approve {
+                try await groupService.approveJoinRequest(groupId: groupId, requestId: request.id)
+            } else {
+                try await groupService.denyJoinRequest(groupId: groupId, requestId: request.id)
+            }
+        } catch {
+            joinRequestActionError = error.localizedDescription
+            showingJoinRequestError = true
         }
     }
 }

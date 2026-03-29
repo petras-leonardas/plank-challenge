@@ -9,9 +9,12 @@ import SwiftUI
 
 struct NotificationsView: View {
     @Environment(\.notificationService) private var notificationService
+    @Environment(\.groupService) private var groupService
     
     @State private var isMarkingAllRead = false
     @State private var isLoadingMore = false
+    @State private var joinRequestActionError: String?
+    @State private var showingJoinRequestError = false
     
     var body: some View {
         Group {
@@ -43,6 +46,11 @@ struct NotificationsView: View {
                 }
             }
         }
+        .alert("Couldn't process request", isPresented: $showingJoinRequestError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(joinRequestActionError ?? "Something went wrong. Try again.")
+        }
         .refreshable {
             await fetchNotifications()
         }
@@ -62,14 +70,10 @@ struct NotificationsView: View {
     private var notificationsList: some View {
         List {
             ForEach(notificationService.notifications) { notification in
-                NotificationRow(notification: notification) {
-                    await markAsRead(id: notification.id)
-                }
-                .onAppear {
-                    // Trigger pagination when this notification appears
-                    // Check if this is one of the last 5 items
-                    checkForPagination(notification: notification)
-                }
+                notificationRow(for: notification)
+                    .onAppear {
+                        checkForPagination(notification: notification)
+                    }
             }
             
             // Load more indicator at the bottom
@@ -82,6 +86,22 @@ struct NotificationsView: View {
                 }
                 .listRowBackground(Color.clear)
             }
+        }
+    }
+    
+    private func notificationRow(for notification: APINotification) -> some View {
+        if notification.type == "group_join_request" {
+            return AnyView(NotificationRow(
+                notification: notification,
+                onTap: { await markAsRead(id: notification.id) },
+                onApprove: { await handleJoinRequest(notification: notification, approve: true) },
+                onDeny: { await handleJoinRequest(notification: notification, approve: false) }
+            ))
+        } else {
+            return AnyView(NotificationRow(
+                notification: notification,
+                onTap: { await markAsRead(id: notification.id) }
+            ))
         }
     }
     
@@ -147,6 +167,45 @@ struct NotificationsView: View {
             }
         }
     }
+    
+    /// Handles approve/deny for a group_join_request notification.
+    /// The notification's relatedEntity carries groupId and requestId.
+    private func handleJoinRequest(notification: APINotification, approve: Bool) async {
+        guard let entity = notification.relatedEntity else { return }
+        
+        // relatedEntity.type == "group", entity.id == groupId
+        // The requestId is embedded in the notification id itself isn't reliable;
+        // we need to re-use the notification's relatedEntity.
+        // Backend: POST /groups/:groupId/requests/:requestId/approve|deny
+        // The notification carries relatedEntity { type: "group", id: groupId }.
+        // We need the requestId separately — it's stored in a second relatedEntity field.
+        // Since the backend only gives us groupId in relatedEntity, we fetch requests first.
+        let groupId = entity.id
+        
+        do {
+            // Mark as read first (non-blocking)
+            try? await notificationService.markAsRead(id: notification.id)
+            
+            // Fetch pending requests to find the matching requestId
+            try await groupService.fetchJoinRequests(groupId: groupId)
+            
+            // Find the first pending request (for a fresh notification there's typically one)
+            // If multiple, the admin can handle rest via Group Settings
+            guard let request = groupService.currentGroupJoinRequests.first else { return }
+            
+            if approve {
+                try await groupService.approveJoinRequest(groupId: groupId, requestId: request.id)
+            } else {
+                try await groupService.denyJoinRequest(groupId: groupId, requestId: request.id)
+            }
+            
+            // Refresh notifications so the row updates
+            try? await notificationService.fetchNotifications()
+        } catch {
+            joinRequestActionError = error.localizedDescription
+            showingJoinRequestError = true
+        }
+    }
 }
 
 // MARK: - Notification Row
@@ -154,6 +213,11 @@ struct NotificationsView: View {
 struct NotificationRow: View {
     let notification: APINotification
     let onTap: () async -> Void
+    /// Non-nil only for group_join_request notifications (admin only)
+    var onApprove: (() async -> Void)? = nil
+    var onDeny: (() async -> Void)? = nil
+    
+    @State private var isActioning = false
     
     var body: some View {
         Button {
@@ -182,6 +246,11 @@ struct NotificationRow: View {
                     Text(notification.date.relativeFormatted)
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
+                    
+                    // Approve/Deny buttons for join requests
+                    if onApprove != nil || onDeny != nil {
+                        joinRequestActions
+                    }
                 }
                 
                 Spacer()
@@ -200,6 +269,61 @@ struct NotificationRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(notification.title). \(notification.message). \(notification.date.relativeFormatted)")
         .accessibilityHint(notification.isRead ? "Notification is read" : "Tap to mark as read")
+    }
+    
+    @ViewBuilder
+    private var joinRequestActions: some View {
+        if isActioning {
+            HStack {
+                ProgressView()
+                    .scaleEffect(0.8)
+                Text("Processing...")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 6)
+        } else {
+            HStack(spacing: 8) {
+                if let onApprove {
+                    Button {
+                        isActioning = true
+                        Task {
+                            defer { isActioning = false }
+                            await onApprove()
+                        }
+                    } label: {
+                        Text("Approve")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.successColor, in: Capsule())
+                    }
+                    .accessibilityLabel("Approve join request")
+                }
+                
+                if let onDeny {
+                    Button {
+                        isActioning = true
+                        Task {
+                            defer { isActioning = false }
+                            await onDeny()
+                        }
+                    } label: {
+                        Text("Deny")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.errorColor, in: Capsule())
+                    }
+                    .accessibilityLabel("Deny join request")
+                }
+            }
+            .padding(.top, 6)
+        }
     }
     
     private var iconColor: Color {

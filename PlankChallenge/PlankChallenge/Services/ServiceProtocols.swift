@@ -127,6 +127,7 @@ protocol GroupServiceProtocol: AnyObject {
     var myGroups: [APIGroup] { get }
     var discoverGroups: [APIGroup] { get }
     var currentGroupMembers: [APIGroupMember] { get }
+    var currentGroupJoinRequests: [APIJoinRequest] { get }
     var currentGroup: APIGroup? { get }
     var isLoading: Bool { get }
     var hasLoaded: Bool { get }
@@ -148,6 +149,9 @@ protocol GroupServiceProtocol: AnyObject {
     func updateGroup(id groupId: String, name: String?, description: String?, joinMode: String?) async throws -> APIGroup
     func deleteGroup(id groupId: String) async throws
     func updateGroupImage(groupId: String, imageUrl: String)
+    func fetchJoinRequests(groupId: String) async throws
+    func approveJoinRequest(groupId: String, requestId: String) async throws
+    func denyJoinRequest(groupId: String, requestId: String) async throws
     func clearData()
     func clearCurrentGroup()
     func clearError()
@@ -244,6 +248,7 @@ protocol InAppNotificationServiceProtocol: AnyObject {
     func loadMoreNotifications() async throws
     func markAsRead(id notificationId: String) async throws
     func markAllAsRead() async throws
+    func fetchUnreadCount() async
     func clearData()
     func clearError()
 }

@@ -55,10 +55,11 @@ struct RootView: View {
         .onChange(of: authService.state) { _, newState in
             switch newState {
             case .authenticated:
-                // Pre-warm streak and plank data as soon as the session is
-                // confirmed — before any tab renders. This ensures PlankTimerView
-                // shows the correct streak immediately on cold launch instead of
-                // briefly displaying "0 day streak" until the Progress tab is visited.
+                // Pre-warm streak, plank, badge, and notification data as soon as the
+                // session is confirmed — before any tab renders. This ensures PlankTimerView
+                // shows the correct streak immediately on cold launch instead of briefly
+                // displaying "0 day streak" until the Progress tab is visited, and ensures
+                // the Notifications tab badge is accurate without requiring a tab visit.
                 Task {
                     async let streakFetch: () = {
                         guard !streakService.hasLoaded else { return }
@@ -68,7 +69,14 @@ struct RootView: View {
                         guard !plankService.hasLoaded else { return }
                         try? await plankService.fetchPlanks(refresh: false)
                     }()
-                    _ = await (streakFetch, plankFetch)
+                    async let badgeFetch: () = {
+                        guard !badgeService.hasLoaded else { return }
+                        try? await badgeService.fetchBadges()
+                    }()
+                    async let unreadFetch: () = {
+                        await notificationService.fetchUnreadCount()
+                    }()
+                    _ = await (streakFetch, plankFetch, badgeFetch, unreadFetch)
                 }
                 
             case .unauthenticated:

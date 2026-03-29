@@ -9,6 +9,7 @@ import SwiftUI
 
 struct MainTabView: View {
     @State private var selectedTab = 0
+    @Environment(\.notificationService) private var notificationService
     
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -30,13 +31,20 @@ struct MainTabView: View {
                 }
                 .tag(2)
             
+            NavigationStack {
+                NotificationsView()
+            }
+            .tabItem {
+                Label("Notifications", systemImage: "bell.fill")
+            }
+            .badge(notificationService.unreadCount > 0 ? notificationService.unreadCount : 0)
+            .tag(3)
+            
             ProfileView()
                 .tabItem {
                     Label("Profile", systemImage: "person.circle.fill")
                 }
-                .tag(3)
-            
-
+                .tag(4)
         }
         .tint(Color.appAccent)
     }

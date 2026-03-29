@@ -140,6 +140,7 @@ final class MockGroupService: GroupServiceProtocol {
     var myGroups: [APIGroup] = []
     var discoverGroups: [APIGroup] = []
     var currentGroupMembers: [APIGroupMember] = []
+    var currentGroupJoinRequests: [APIJoinRequest] = []
     var currentGroup: APIGroup? = nil
     var isLoading: Bool = false
     var hasLoaded: Bool = true
@@ -164,13 +165,20 @@ final class MockGroupService: GroupServiceProtocol {
     }
     func deleteGroup(id groupId: String) async throws { }
     func updateGroupImage(groupId: String, imageUrl: String) { }
+    func fetchJoinRequests(groupId: String) async throws { }
+    func approveJoinRequest(groupId: String, requestId: String) async throws { }
+    func denyJoinRequest(groupId: String, requestId: String) async throws { }
     func clearData() {
         myGroups = []
         discoverGroups = []
+        currentGroupJoinRequests = []
         error = nil
         hasLoaded = false
     }
-    func clearCurrentGroup() { currentGroup = nil }
+    func clearCurrentGroup() {
+        currentGroup = nil
+        currentGroupJoinRequests = []
+    }
     func clearError() { error = nil }
 }
 
@@ -268,6 +276,7 @@ final class MockNotificationService: InAppNotificationServiceProtocol {
     func loadMoreNotifications() async throws { }
     func markAsRead(id notificationId: String) async throws { }
     func markAllAsRead() async throws { }
+    func fetchUnreadCount() async { }
     func clearData() {
         notifications = []
         unreadCount = 0

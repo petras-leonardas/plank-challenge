@@ -134,7 +134,7 @@ final class InAppNotificationService: InAppNotificationServiceProtocol {
         error = nil
         
         do {
-            let _: MarkNotificationReadResponse = try await APIClient.shared.patch(
+            let _: MarkNotificationReadResponse = try await APIClient.shared.post(
                 "/notifications/\(notificationId)/read",
                 body: EmptyNotificationBody()
             )
@@ -204,6 +204,21 @@ final class InAppNotificationService: InAppNotificationServiceProtocol {
         }
     }
     
+    // MARK: - Unread Count
+    
+    /// Fetches only the unread count from the API — lightweight call for badge display.
+    /// Updates `unreadCount` without touching the notifications list.
+    func fetchUnreadCount() async {
+        do {
+            let response: UnreadCountResponse = try await APIClient.shared.get(
+                "/notifications/unread-count"
+            )
+            unreadCount = response.unreadCount
+        } catch {
+            // Silently fail — unread count is non-critical
+        }
+    }
+    
     // MARK: - Validation Helpers
     
     /// Validates that a notification ID is safe to use in URL paths
@@ -237,6 +252,10 @@ final class InAppNotificationService: InAppNotificationServiceProtocol {
 // MARK: - Request/Response Types
 
 private struct EmptyNotificationBody: Encodable {}
+
+private struct UnreadCountResponse: Decodable {
+    let unreadCount: Int
+}
 
 private struct MarkNotificationReadResponse: Decodable {
     let success: Bool
