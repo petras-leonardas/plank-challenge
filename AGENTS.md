@@ -18,19 +18,30 @@ The owner works with a **physical iPhone connected via USB**. All changes are bu
 
 ```bash
 # From: PlankChallenge/
+
+# Step 1 — build (check output for errors before installing)
 xcodebuild \
   -project PlankChallenge.xcodeproj \
   -scheme PlankChallenge \
   -destination "id=00008150-001E444A0AD2401C" \
   -configuration Debug \
-  build install
+  build 2>&1 | grep -E "error:|BUILD SUCCEEDED|BUILD FAILED"
 
+# Step 2 — install
+xcodebuild \
+  -project PlankChallenge.xcodeproj \
+  -scheme PlankChallenge \
+  -destination "id=00008150-001E444A0AD2401C" \
+  -configuration Debug \
+  install
+
+# Step 3 — deploy to device
 xcrun devicectl device install app \
   --device 00008150-001E444A0AD2401C \
   "$(find ~/Library/Developer/Xcode/DerivedData/PlankChallenge-*/Build/Intermediates.noindex/ArchiveIntermediates/PlankChallenge/InstallationBuildProductsLocation/Applications -name 'PlankChallenge.app' | head -1)"
 ```
 
-**Always do both steps** (build + install) after iOS changes. Check for compile errors with `grep -E "error:|BUILD SUCCEEDED|BUILD FAILED"` on the xcodebuild output.
+**Always do all three steps** after iOS changes. Use `clean build` instead of `build` when you change a protocol, enum raw value, or type definition — Xcode's incremental build can produce misleading errors from stale artifacts. For view or logic-only changes, `build` alone is fine.
 
 ### Deploy backend to Cloudflare
 
@@ -43,6 +54,11 @@ The backend is **always live on Cloudflare Workers** — there is no local backe
 
 **Live API URL:** `https://plank-challenge-api.petras-leonardas.workers.dev`
 
+**D1 direct SQL** (for migrations or one-off data fixes):
+```bash
+npx wrangler d1 execute DB --remote --command "YOUR SQL HERE"
+```
+
 ### After any change session — commit and push
 
 ```bash
@@ -51,7 +67,7 @@ git commit -m "description"
 git push
 ```
 
-Always commit and push after a working session to keep the repo up to date for rollback safety.
+Commit after each logical fix, not only at end of session. Never commit `UserInterfaceState.xcuserstate` — it is git-ignored and must stay that way.
 
 ---
 
@@ -74,7 +90,7 @@ Always commit and push after a working session to keep the repo up to date for r
 
 Services are singletons created in `PlankChallengeApp.swift` and injected into the view hierarchy there.
 
-**API calls:** All HTTP calls go through `APIClient.shared` (a Swift `actor`). It handles: Bearer token auth, `.convertFromSnakeCase` JSON decoding (backend sends snake_case, Swift models use camelCase), automatic token refresh on 401, and 3-retry on network errors.
+**API calls:** All HTTP calls go through `APIClient.shared` (a Swift `actor`). It handles: Bearer token auth, `.convertFromSnakeCase` JSON decoding (backend sends snake_case, Swift models use camelCase), automatic token refresh on 401, and 3-retry on network errors. Convenience methods: `.get()`, `.post()`, `.patch()`, `.delete()`, `.uploadBinary()`.
 
 **All API response/request models** live in one file: `PlankChallenge/PlankChallenge/Services/API/Models/APIModels.swift`
 
@@ -126,6 +142,18 @@ Services are singletons created in `PlankChallengeApp.swift` and injected into t
 
 ## Key conventions
 
+### Content and copy
+
+Before writing any user-facing text — button labels, empty states, alerts, error messages, notifications, badge descriptions — read `CONTENT_STRATEGY.md`. It defines the voice, terminology rules, capitalisation mechanics, and has reference copy for every screen.
+
+Key rules to know without reading the full doc:
+
+- Use `"Streak Shield"` not "freeze token". Use `"Add Plank"` not "manual entry". Use `"Plank"` not "session" or "workout". See §1.3 of `CONTENT_STRATEGY.md` for the full terminology table.
+- No `"please"` anywhere in the UI. No exclamation marks in error states.
+- **Error alert pattern:** title = what couldn't be done (`"Couldn't sign you in"`), body = what to do next, button = `"OK"` or `"Retry"`.
+- **Empty state pattern:** factual heading + warm/actionable one-liner. Never blame the user for the state being empty.
+- Capitalisation: primary action buttons are Title Case (`"Save Changes"`), everything else the user reads is sentence case (`"Your streak is waiting."`).
+
 ### Adding a new service
 1. Define the protocol in `ServiceProtocols.swift`
 2. Implement `@Observable @MainActor class MyService: MyServiceProtocol`
@@ -147,6 +175,48 @@ The LSP often shows false "Cannot find type" errors in Swift files because it la
 
 ### One plank per day
 The app enforces one plank per day at both the backend (HTTP 409 `PLANK_LIMIT_REACHED`) and the iOS UI (button disabled when `plankService.hasPlankToday`). Do not add any UI affordance that allows submitting more than one plank per day.
+
+---
+
+## Schema mismatch traps
+
+These caused significant debugging time. Read before touching `APIModels.swift` or any backend route response.
+
+- **`AvatarView` has two separate parameters:** `imageName` (local Xcode asset catalog name) and `imageUrl` (remote HTTPS URL loaded via `AsyncImage`). Profile photos are always remote — always pass them to `imageUrl`. Passing a URL string to `imageName` silently renders only the placeholder with no error.
+
+- **Verify the JSON shape before writing a model.** Hit the live API directly with curl before assuming a response is nested. Many backend responses return a flat object — there is no wrapper key. If the backend sends `{ "name": "...", "isMember": true }` at the top level, the iOS model must decode those fields at the top level too, not inside a nested struct.
+
+- **SQLite aggregate functions return `Double`, not `Int`.** `SUM()` and `MAX()` on `duration_seconds` (a SQLite REAL column) produce floating-point values like `11.80199...`. iOS model fields for plank stats must be typed as `Double` — using `Int` causes a `typeMismatch` decode crash.
+
+- **`convertFromSnakeCase` maps key format only — it does not rename keys.** If the backend sends `"entries"` and the Swift property is named `leaderboard`, they will never match regardless of casing. Always verify the exact JSON key name from the backend source or a live API call.
+
+- **Global/following leaderboard response keys:** `entries` (the list) and `currentUserRank` (caller's position). Not `leaderboard`, not `userRank`, not `user_rank`.
+
+---
+
+## Group roles
+
+- Group creator is assigned `role = "owner"` in `group_members` at creation.
+- `GET /groups/:id` returns the `role` field **only** for `"owner"` and `"admin"`. Regular members receive `isMember: true` but **no `role` field** in the response — the field is simply absent, not null.
+- `isCurrentUserAdmin` on `GroupService` returns `true` for both `"owner"` and `"admin"`.
+- Only the owner can delete a group.
+- The "promote member to admin" feature is explicitly deferred — do not add UI for it. Only the group creator has admin access for now.
+
+---
+
+## UI patterns
+
+- **Settings and configuration screens must be `.sheet`, not `NavigationLink`.** A `NavigationLink` push triggers `.onDisappear` on the presenting view, which clears service state (e.g. `groupService.currentGroup = nil`) before the destination even renders. Always present settings as a modal sheet.
+
+- **Pre-warm service data in `RootView`.** Any service whose data is needed on the first render of any tab must be fetched in `RootView.onChange(of: authService.state)` when `.authenticated` fires — before `MainTabView` appears. Streak and planks are already pre-warmed there; follow that pattern for any new service.
+
+- **`AppStorage` keys for today's plank** (shared between `PlankTimerView` and `SettingsView`):
+  - `todayPlankDate` — String (YYYY-MM-DD), used to detect day rollover
+  - `todayPlankCount` — Int, drives `PlankTimerView` state machine transitions
+  - `todayPlankTimesJSON` — JSON `[Double]`, array of durations read by `SettingsView`
+  - `todayPlankTotalTime` — Double, cumulative duration for today
+
+  When writing code that affects today's plank, update all four keys consistently. For the delete flow, `plankService.todaysPlank` (server-synced) is the authoritative source for the plank ID — not `AppStorage`.
 
 ---
 
