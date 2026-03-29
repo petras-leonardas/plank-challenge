@@ -234,7 +234,7 @@ media.post('/group/:groupId', authMiddleware, async (c) => {
     .bind(groupId, userId, 'active')
     .first<Pick<GroupMemberRecord, 'role'>>();
   
-  if (!membership || membership.role !== 'admin') {
+  if (!membership || (membership.role !== 'admin' && membership.role !== 'owner')) {
     return errors.forbidden(c, 'Only group admins can update the group image');
   }
   
@@ -333,7 +333,7 @@ media.delete('/group/:groupId', authMiddleware, async (c) => {
     .bind(groupId, userId, 'active')
     .first<Pick<GroupMemberRecord, 'role'>>();
   
-  if (!membership || membership.role !== 'admin') {
+  if (!membership || (membership.role !== 'admin' && membership.role !== 'owner')) {
     return errors.forbidden(c, 'Only group admins can update the group image');
   }
   

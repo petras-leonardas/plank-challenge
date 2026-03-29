@@ -388,8 +388,8 @@ struct GroupSettingsView: View {
                 )
             }
 
-            if let image = selectedImage,
-               let newImageUrl = try? await mediaService.uploadGroupImage(groupId: groupId, image: image) {
+            if let image = selectedImage {
+                let newImageUrl = try await mediaService.uploadGroupImage(groupId: groupId, image: image)
                 groupService.updateGroupImage(groupId: groupId, imageUrl: newImageUrl)
             }
 
