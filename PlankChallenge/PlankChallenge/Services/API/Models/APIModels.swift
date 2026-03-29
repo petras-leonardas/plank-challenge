@@ -673,7 +673,7 @@ struct APIGroup: Decodable, Identifiable, Sendable {
 struct APIJoinRequest: Decodable, Identifiable, Sendable {
     let id: String
     let userId: String
-    let groupId: String
+    let groupId: String?   // not returned by the list endpoint — client knows from context
     let status: String
     let createdAt: String
     let user: RequestUser?
