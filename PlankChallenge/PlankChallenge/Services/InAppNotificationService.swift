@@ -69,7 +69,8 @@ final class InAppNotificationService: InAppNotificationServiceProtocol {
                 "/notifications?limit=\(pageSize)&offset=0"
             )
             notifications = response.notifications
-            unreadCount = response.unreadCount
+            // Backend list endpoint does not return unreadCount — keep existing value
+            // (it's populated by fetchUnreadCount() called at login)
             hasMore = response.pagination.hasMore
             currentOffset = response.notifications.count
             hasLoaded = true
@@ -105,7 +106,6 @@ final class InAppNotificationService: InAppNotificationServiceProtocol {
             let newNotifications = response.notifications.filter { !existingIds.contains($0.id) }
             notifications.append(contentsOf: newNotifications)
             
-            unreadCount = response.unreadCount
             hasMore = response.pagination.hasMore
             currentOffset += response.notifications.count
         } catch let apiError as APIClientError {

@@ -626,10 +626,12 @@ struct APINotification: Decodable, Identifiable, Sendable {
 }
 
 /// Response from /notifications
+/// Note: the backend list endpoint does NOT include unreadCount in the response body.
+/// Use GET /notifications/unread-count for the badge count.
 struct NotificationsListResponse: Decodable {
     let notifications: [APINotification]
     let pagination: PaginationMeta
-    let unreadCount: Int
+    let unreadCount: Int?
 }
 
 // MARK: - Group Models
