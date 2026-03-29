@@ -237,6 +237,7 @@ export interface NotificationRecord {
   message: string;
   related_entity_type: string | null;
   related_entity_id: string | null;
+  actor_image_url: string | null;
   is_read: number;
   created_at: string;
 }
@@ -356,6 +357,7 @@ export interface FormattedNotification {
     type: string;
     id: string;
   } | null;
+  actorImageUrl: string | null;
   isRead: boolean;
   createdAt: string;
 }

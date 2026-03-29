@@ -267,7 +267,7 @@ struct NotificationRow: View {
                     AvatarView(
                         text: name,
                         imageName: Optional<String>.none,
-                        imageUrl: Optional<String>.none,
+                        imageUrl: notification.actorImageUrl,
                         size: 36
                     )
                 } else {

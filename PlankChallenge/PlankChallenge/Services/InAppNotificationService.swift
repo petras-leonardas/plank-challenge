@@ -152,6 +152,7 @@ final class InAppNotificationService: InAppNotificationServiceProtocol {
                     title: oldNotification.title,
                     message: oldNotification.message,
                     relatedEntity: oldNotification.relatedEntity,
+                    actorImageUrl: oldNotification.actorImageUrl,
                     isRead: true,
                     createdAt: oldNotification.createdAt
                 )
@@ -188,6 +189,7 @@ final class InAppNotificationService: InAppNotificationServiceProtocol {
                     title: notification.title,
                     message: notification.message,
                     relatedEntity: notification.relatedEntity,
+                    actorImageUrl: notification.actorImageUrl,
                     isRead: true,
                     createdAt: notification.createdAt
                 )

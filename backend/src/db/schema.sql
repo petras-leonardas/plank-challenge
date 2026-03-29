@@ -211,6 +211,8 @@ CREATE TABLE IF NOT EXISTS notifications (
     
     related_entity_type TEXT CHECK (related_entity_type IS NULL OR related_entity_type IN ('user', 'group', 'plank', 'badge')),
     related_entity_id TEXT,
+    -- Profile image URL of the person who triggered the notification (follower, new member, etc.)
+    actor_image_url TEXT,
     
     is_read INTEGER DEFAULT 0 CHECK (is_read IN (0, 1)),
     

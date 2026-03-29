@@ -128,15 +128,16 @@ async function createFollowNotification(
   db: D1Database,
   followerId: string,
   followedUserId: string,
-  followerDisplayName: string
+  followerDisplayName: string,
+  followerImageUrl?: string | null
 ): Promise<void> {
   const notificationId = crypto.randomUUID();
   const now = new Date().toISOString();
   
   await db
     .prepare(`
-      INSERT INTO notifications (id, user_id, type, title, message, related_entity_type, related_entity_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO notifications (id, user_id, type, title, message, related_entity_type, related_entity_id, actor_image_url, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     .bind(
       notificationId,
@@ -146,6 +147,7 @@ async function createFollowNotification(
       `${followerDisplayName} started following you`,
       'user',
       followerId,
+      followerImageUrl ?? null,
       now
     )
     .run();
@@ -488,13 +490,14 @@ users.post('/:id/follow', authMiddleware, async (c) => {
     return errors.notFound(c, 'User');
   }
   
-  // Get current user's display name for notification (needed for success case)
+  // Get current user's display name and avatar for the follow notification
   const currentUser = await c.env.DB
-    .prepare('SELECT display_name FROM users WHERE id = ?')
+    .prepare('SELECT display_name, profile_image_url FROM users WHERE id = ?')
     .bind(currentUserId)
-    .first<Pick<UserRecord, 'display_name'>>();
+    .first<Pick<UserRecord, 'display_name' | 'profile_image_url'>>();
   
   const followerDisplayName = currentUser?.display_name || 'Someone';
+  const followerImageUrl = currentUser?.profile_image_url ?? null;
   
   // Create follow relationship and update counts
   // SECURITY: Use INSERT with UNIQUE constraint to prevent race conditions
@@ -527,7 +530,7 @@ users.post('/:id/follow', authMiddleware, async (c) => {
   
   // Create notification for the followed user (non-blocking)
   try {
-    await createFollowNotification(c.env.DB, currentUserId, targetUserId, followerDisplayName);
+    await createFollowNotification(c.env.DB, currentUserId, targetUserId, followerDisplayName, followerImageUrl);
   } catch (notificationError) {
     // Log but don't fail the follow operation
     console.error('Failed to create follow notification:', notificationError);

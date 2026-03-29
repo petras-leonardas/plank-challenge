@@ -235,15 +235,16 @@ async function createNotification(
   title: string,
   message: string,
   relatedEntityType?: string,
-  relatedEntityId?: string
+  relatedEntityId?: string,
+  actorImageUrl?: string
 ): Promise<void> {
   const notificationId = crypto.randomUUID();
   const now = new Date().toISOString();
   
   await db
     .prepare(`
-      INSERT INTO notifications (id, user_id, type, title, message, related_entity_type, related_entity_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO notifications (id, user_id, type, title, message, related_entity_type, related_entity_id, actor_image_url, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     .bind(
       notificationId,
@@ -253,6 +254,7 @@ async function createNotification(
       message,
       relatedEntityType || null,
       relatedEntityId || null,
+      actorImageUrl || null,
       now
     )
     .run();
@@ -268,7 +270,8 @@ async function createNotificationBatch(
   title: string,
   message: string,
   relatedEntityType?: string,
-  relatedEntityId?: string
+  relatedEntityId?: string,
+  actorImageUrl?: string
 ): Promise<void> {
   if (userIds.length === 0) return;
   
@@ -277,8 +280,8 @@ async function createNotificationBatch(
   const statements = userIds.map(userId => 
     db
       .prepare(`
-        INSERT INTO notifications (id, user_id, type, title, message, related_entity_type, related_entity_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO notifications (id, user_id, type, title, message, related_entity_type, related_entity_id, actor_image_url, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .bind(
         crypto.randomUUID(),
@@ -288,6 +291,7 @@ async function createNotificationBatch(
         message,
         relatedEntityType || null,
         relatedEntityId || null,
+        actorImageUrl || null,
         now
       )
   );
@@ -723,9 +727,9 @@ groups.post('/:id/join', authMiddleware, async (c) => {
     // Notify all admins/owner that a new member joined
     try {
       const joiner = await c.env.DB
-        .prepare('SELECT display_name FROM users WHERE id = ?')
+        .prepare('SELECT display_name, profile_image_url FROM users WHERE id = ?')
         .bind(userId)
-        .first<{ display_name: string }>();
+        .first<{ display_name: string; profile_image_url: string | null }>();
 
       const admins = await c.env.DB
         .prepare(`SELECT user_id FROM group_members WHERE group_id = ? AND role IN ('owner', 'admin') AND status = 'active' AND user_id != ?`)
@@ -742,7 +746,8 @@ groups.post('/:id/join', authMiddleware, async (c) => {
           'New Member',
           `${joinerName} joined ${group.name}`,
           'user',
-          userId
+          userId,
+          joiner?.profile_image_url ?? undefined
         );
       }
     } catch (err) {

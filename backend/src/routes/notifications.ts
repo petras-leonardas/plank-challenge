@@ -38,6 +38,7 @@ function formatNotification(notification: NotificationRecord): FormattedNotifica
             id: notification.related_entity_id,
           }
         : null,
+    actorImageUrl: notification.actor_image_url ?? null,
     isRead: notification.is_read === 1,
     createdAt: notification.created_at,
   };
@@ -75,7 +76,7 @@ notifications.get('/', zValidator('query', listNotificationsSchema), async (c) =
 
   // Build query
   let query = `
-    SELECT id, user_id, type, title, message, related_entity_type, related_entity_id, is_read, created_at
+    SELECT id, user_id, type, title, message, related_entity_type, related_entity_id, actor_image_url, is_read, created_at
     FROM notifications
     WHERE user_id = ?
   `;
@@ -154,7 +155,7 @@ notifications.get('/:id', async (c) => {
 
   const notification = await db
     .prepare(`
-      SELECT id, user_id, type, title, message, related_entity_type, related_entity_id, is_read, created_at
+      SELECT id, user_id, type, title, message, related_entity_type, related_entity_id, actor_image_url, is_read, created_at
       FROM notifications
       WHERE id = ? AND user_id = ?
     `)

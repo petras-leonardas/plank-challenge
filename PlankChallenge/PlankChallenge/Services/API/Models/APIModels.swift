@@ -616,6 +616,8 @@ struct APINotification: Decodable, Identifiable, Sendable {
     let title: String
     let message: String
     let relatedEntity: RelatedEntity?
+    /// Profile image URL of the person who triggered the notification (follower, new member, etc.)
+    let actorImageUrl: String?
     let isRead: Bool
     let createdAt: String
     
