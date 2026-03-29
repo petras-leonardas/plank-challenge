@@ -108,21 +108,20 @@ struct NotificationsView: View {
         }()
         
         if notification.type == "group_join_request" {
-            // Only show action buttons on unread notifications — once read the request
-            // has already been actioned. Buttons on read notifications cause 404 errors.
-            if !notification.isRead {
-                return AnyView(NotificationRow(
-                    notification: notification,
-                    onTap: { await markAsRead(id: notification.id) },
-                    onApprove: { try await handleJoinRequest(notification: notification, approve: true) },
-                    onDeny: { try await handleJoinRequest(notification: notification, approve: false) }
-                ))
-            } else {
-                return AnyView(NotificationRow(
-                    notification: notification,
-                    onTap: { await markAsRead(id: notification.id) }
-                ))
-            }
+            // Always show Approve/Decline buttons on join request notifications.
+            // We do NOT gate on isRead here because markAllAsRead fires when the
+            // admin leaves the tab — hiding buttons on return even though they
+            // haven't acted yet. The backend returns a clear error if the request
+            // has already been actioned (404), which surfaces via the alert.
+            // The NotificationRow itself tracks actionResult locally so buttons
+            // disappear immediately after a successful approve/decline within
+            // the same session without needing to rely on isRead.
+            return AnyView(NotificationRow(
+                notification: notification,
+                onTap: { await markAsRead(id: notification.id) },
+                onApprove: { try await handleJoinRequest(notification: notification, approve: true) },
+                onDeny: { try await handleJoinRequest(notification: notification, approve: false) }
+            ))
         } else if let userId = navigateToUserId {
             return AnyView(NotificationRow(
                 notification: notification,
