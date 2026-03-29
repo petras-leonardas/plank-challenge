@@ -667,6 +667,9 @@ struct APIGroup: Decodable, Identifiable, Sendable {
     /// `true` when the current user has a pending join request for this group.
     /// Only populated by `/groups/discover` and `/groups/:id` — absent for members.
     let pendingRequest: Bool?
+    /// Up to 4 profile image URLs of recently-joined members who have a photo.
+    /// Empty array when no members have photos. Used to render the avatar stack in list cards.
+    let memberPreviews: [String]?
 }
 
 /// A pending join request for a group (from GET /groups/:id/requests)
@@ -767,7 +770,7 @@ struct GroupDetailResponse: Decodable {
             imageUrl: imageUrl, groupType: groupType, joinMode: joinMode,
             memberCount: memberCount, createdBy: createdBy,
             inviteCode: inviteCode, createdAt: createdAt, updatedAt: updatedAt,
-            pendingRequest: pendingRequest
+            pendingRequest: pendingRequest, memberPreviews: nil
         )
     }
     

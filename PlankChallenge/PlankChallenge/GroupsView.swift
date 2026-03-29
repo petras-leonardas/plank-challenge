@@ -251,9 +251,7 @@ struct MyGroupRowCard: View {
                     }
                 }
                 
-                Text("\(group.memberCount) members")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                MemberAvatarPreview(urls: group.memberPreviews ?? [], totalCount: group.memberCount)
             }
             
             Spacer()
@@ -306,9 +304,7 @@ struct DiscoverGroupRowCard: View {
                 }
                 
                 HStack(spacing: 8) {
-                    Text("\(group.memberCount) members")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    MemberAvatarPreview(urls: group.memberPreviews ?? [], totalCount: group.memberCount)
                     
                     if group.requiresApproval {
                         Text("· Approval required")
@@ -328,6 +324,59 @@ struct DiscoverGroupRowCard: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(group.name), \(group.memberCount) members\(group.requiresApproval ? ", approval required" : "")")
         .accessibilityHint("Tap to view group details")
+    }
+}
+
+// MARK: - Member Avatar Preview
+
+/// Overlapping avatar circles for up to 3 members, with a count badge.
+/// Falls back to plain "N members" text when no photo URLs are available.
+struct MemberAvatarPreview: View {
+    let urls: [String]
+    let totalCount: Int
+
+    private var avatarSize: CGFloat { 20 }
+    private var overlap: CGFloat { avatarSize * 0.35 }
+    private var visible: [String] { Array(urls.prefix(3)) }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if visible.isEmpty {
+                // No photos available — plain count text
+                Text(countLabel)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                // Overlapping avatar stack
+                HStack(spacing: -overlap) {
+                    ForEach(Array(visible.enumerated()), id: \.offset) { index, url in
+                        AsyncImage(url: URL(string: url)) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                            default:
+                                Circle().fill(Color.appAccent.opacity(0.2))
+                            }
+                        }
+                        .frame(width: avatarSize, height: avatarSize)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(Color.warmWhiteCard, lineWidth: 1.5))
+                        .zIndex(Double(visible.count - index))
+                    }
+                }
+
+                Text(countLabel)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityLabel(countLabel)
+    }
+
+    private var countLabel: String {
+        totalCount == 1 ? "1 member" : "\(totalCount) members"
     }
 }
 

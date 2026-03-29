@@ -205,7 +205,7 @@ final class GroupService: GroupServiceProtocol {
                         joinMode: current.joinMode, memberCount: current.memberCount,
                         createdBy: current.createdBy, inviteCode: current.inviteCode,
                         createdAt: current.createdAt, updatedAt: current.updatedAt,
-                        pendingRequest: true
+                        pendingRequest: true, memberPreviews: current.memberPreviews
                     )
                 }
                 // Also update the discover list entry
@@ -217,7 +217,7 @@ final class GroupService: GroupServiceProtocol {
                         joinMode: g.joinMode, memberCount: g.memberCount,
                         createdBy: g.createdBy, inviteCode: g.inviteCode,
                         createdAt: g.createdAt, updatedAt: g.updatedAt,
-                        pendingRequest: true
+                        pendingRequest: true, memberPreviews: g.memberPreviews
                     )
                 }
             } else {
@@ -358,7 +358,8 @@ final class GroupService: GroupServiceProtocol {
                 imageUrl: imageUrl, groupType: group.groupType, joinMode: group.joinMode,
                 memberCount: group.memberCount, createdBy: group.createdBy,
                 inviteCode: group.inviteCode, createdAt: group.createdAt,
-                updatedAt: group.updatedAt, pendingRequest: group.pendingRequest
+                updatedAt: group.updatedAt, pendingRequest: group.pendingRequest,
+                memberPreviews: group.memberPreviews
             )
         }
         myGroups = myGroups.map(patch)
