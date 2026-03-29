@@ -38,17 +38,58 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     }
     
     /// Called when a silent push (content-available: 1) is received.
-    /// The backend sends these whenever a new notification is created for the user.
-    /// We refresh both the unread count (badge) AND the full notification list so
-    /// that when the user opens the Notifications tab the new item is already there.
+    ///
+    /// The backend sends a typed payload:
+    ///   { aps: { "content-available": 1 }, refreshType: ["notifications", "groups", ...] }
+    ///
+    /// We inspect the `refreshType` array and dispatch the appropriate service
+    /// refresh for each value. This keeps every device in sync without requiring
+    /// the user to pull-to-refresh.
+    ///
+    /// Supported refresh types:
+    ///   "notifications" — unread count + full notification list
+    ///   "groups"        — user's group list
+    ///   "leaderboard"   — global leaderboard
+    ///   "badges"        — earned badges
+    ///   "planks"        — today's plank state
     func application(
         _ application: UIApplication,
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
+        // Guard: only process if the user has a valid auth token.
+        // A silent push can arrive during onboarding or between logout and
+        // the next login. Fetching without a token produces 401 errors that
+        // can leave service state (notifications, groups, etc.) empty or
+        // corrupt, causing views to show empty states on first open.
+        guard APIClient.shared.isAuthenticated else {
+            completionHandler(.noData)
+            return
+        }
+
+        // Extract the typed refresh list. Fall back to ["notifications"] for
+        // pushes sent before the typed payload was introduced.
+        let refreshTypes = (userInfo["refreshType"] as? [String]) ?? ["notifications"]
+
         Task {
-            await InAppNotificationService.shared.fetchUnreadCount()
-            try? await InAppNotificationService.shared.fetchNotifications()
+            for type in refreshTypes {
+                switch type {
+                case "notifications":
+                    await InAppNotificationService.shared.fetchUnreadCount()
+                    try? await InAppNotificationService.shared.fetchNotifications()
+                case "groups":
+                    try? await GroupService.shared.fetchMyGroups()
+                    try? await GroupService.shared.fetchDiscoverGroups()
+                case "leaderboard":
+                    try? await LeaderboardService.shared.fetchGlobalLeaderboardBoth()
+                case "badges":
+                    try? await BadgeService.shared.fetchBadges()
+                case "planks":
+                    try? await PlankService.shared.fetchPlanks(refresh: true)
+                default:
+                    break
+                }
+            }
             completionHandler(.newData)
         }
     }

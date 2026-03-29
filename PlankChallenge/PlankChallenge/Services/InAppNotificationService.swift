@@ -57,8 +57,13 @@ final class InAppNotificationService: InAppNotificationServiceProtocol {
     
     // MARK: - Fetch Notifications
     
-    /// Fetches notifications from the API (refreshes from start)
+    /// Fetches notifications from the API (refreshes from start).
+    /// Guards against concurrent calls — if a fetch is already in progress the
+    /// second caller returns immediately. This prevents race conditions where a
+    /// background silent-push fetch and a tab-select fetch run simultaneously,
+    /// leaving the notifications array in an inconsistent state.
     func fetchNotifications() async throws {
+        guard !isLoading else { return }
         isLoading = true
         error = nil
         currentOffset = 0

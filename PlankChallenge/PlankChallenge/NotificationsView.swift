@@ -398,9 +398,14 @@ struct NotificationRow: View {
             .padding(.vertical, 10)
             .padding(.top, 8)
         } else {
+            // .disabled is applied to the whole HStack so both buttons go dead
+            // the instant either is tapped — prevents double-tap sending both
+            // approve AND deny before SwiftUI re-renders with isActioning = true.
             HStack(spacing: 12) {
                 if let onApprove {
                     Button {
+                        // Set synchronously — before the Task runs — so the
+                        // .disabled modifier takes effect in the same render cycle.
                         isActioning = true
                         Task {
                             do {
@@ -448,6 +453,10 @@ struct NotificationRow: View {
                 }
             }
             .padding(.top, 10)
+            // Disable the entire button group as soon as either button is tapped.
+            // This prevents the ~1 render-cycle window where both buttons could
+            // receive taps before isActioning = true propagates to the UI.
+            .disabled(isActioning)
         }
     }
     
