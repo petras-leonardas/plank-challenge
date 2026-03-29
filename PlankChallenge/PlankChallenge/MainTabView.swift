@@ -50,9 +50,13 @@ struct MainTabView: View {
         }
         .tint(Color.appAccent)
         .onChange(of: selectedTab) { oldTab, newTab in
-            // Refresh unread count when entering the Notifications tab
+            // Refresh count + list when entering the Notifications tab so the
+            // user always sees fresh content regardless of hasLoaded state.
             if newTab == 3 {
-                Task { await notificationService.fetchUnreadCount() }
+                Task {
+                    await notificationService.fetchUnreadCount()
+                    try? await notificationService.fetchNotifications()
+                }
             }
             // Mark all as read when *leaving* the Notifications tab.
             // Doing this here (not in NotificationsView.onDisappear) ensures

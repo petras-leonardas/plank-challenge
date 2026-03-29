@@ -39,8 +39,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     
     /// Called when a silent push (content-available: 1) is received.
     /// The backend sends these whenever a new notification is created for the user.
-    /// We use it to refresh the unread count and update the tab badge without
-    /// requiring the user to open the app manually.
+    /// We refresh both the unread count (badge) AND the full notification list so
+    /// that when the user opens the Notifications tab the new item is already there.
     func application(
         _ application: UIApplication,
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
@@ -48,6 +48,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) {
         Task {
             await InAppNotificationService.shared.fetchUnreadCount()
+            try? await InAppNotificationService.shared.fetchNotifications()
             completionHandler(.newData)
         }
     }
