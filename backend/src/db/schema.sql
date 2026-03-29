@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS users (
     
     -- Plank preferences (matches code: 'elbow', 'straightArm', 'parallettes')
     preferred_plank_type TEXT DEFAULT 'elbow' CHECK (preferred_plank_type IN ('elbow', 'straightArm', 'parallettes')),
+    -- Goal duration in seconds for countdown mode (NULL = free mode / no goal set)
+    plank_goal_seconds INTEGER DEFAULT NULL CHECK (plank_goal_seconds IS NULL OR plank_goal_seconds > 0),
     
     -- Streak data (denormalized for performance)
     current_streak INTEGER DEFAULT 0 CHECK (current_streak >= 0),

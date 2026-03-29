@@ -20,6 +20,7 @@ const updateProfileSchema = z.object({
   bio: z.string().max(500).optional().nullable(),
   preferredPlankType: z.enum(['elbow', 'straightArm', 'parallettes']).optional(),
   timezone: z.string().optional(),
+  plankGoalSeconds: z.number().int().positive().optional().nullable(),
 });
 
 // ============================================
@@ -82,6 +83,7 @@ function formatUser(user: UserRecord) {
     bio: user.bio,
     profileImageUrl: user.profile_image_url,
     preferredPlankType: user.preferred_plank_type || 'elbow',
+    plankGoalSeconds: user.plank_goal_seconds ?? null,
     currentStreak: user.current_streak || 0,
     longestStreak: user.longest_streak || 0,
     freezeTokens: user.freeze_tokens || 2,
@@ -217,6 +219,11 @@ users.patch('/me', authMiddleware, zValidator('json', updateProfileSchema), asyn
   if (updates.timezone !== undefined) {
     fields.push('timezone = ?');
     values.push(updates.timezone);
+  }
+  
+  if (updates.plankGoalSeconds !== undefined) {
+    fields.push('plank_goal_seconds = ?');
+    values.push(updates.plankGoalSeconds);
   }
   
   if (fields.length === 0) {

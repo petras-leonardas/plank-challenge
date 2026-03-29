@@ -183,6 +183,7 @@ export interface UserRecord {
   google_id: string | null;
   password_hash: string | null;
   preferred_plank_type: string;
+  plank_goal_seconds: number | null;
   current_streak: number;
   longest_streak: number;
   freeze_tokens: number;
