@@ -263,11 +263,24 @@ struct NotificationRow: View {
         }
     }
     
+    private var hasActions: Bool { onApprove != nil || onDeny != nil }
+    
     var body: some View {
-        // NotificationRow intentionally does NOT use an outer Button wrapper.
-        // When Approve/Deny action buttons are present (join requests), nesting
-        // Buttons inside a Button label breaks the inner buttons in SwiftUI.
-        // Instead we use .onTapGesture for mark-as-read on plain rows.
+        if hasActions {
+            // Action rows: plain HStack — no outer tap gesture so inner Buttons work
+            rowContent
+        } else {
+            // Plain rows: wrap in Button for tap-to-read
+            Button {
+                Task { await onTap() }
+            } label: {
+                rowContent
+            }
+            .buttonStyle(.plain)
+        }
+    }
+    
+    private var rowContent: some View {
         HStack(alignment: .top, spacing: 12) {
             // Avatar for person-based notifications, icon for everything else
             if let name = personName {
@@ -284,7 +297,6 @@ struct NotificationRow: View {
                     .frame(width: 36)
             }
             
-            // Content
             VStack(alignment: .leading, spacing: 4) {
                 Text(notification.title)
                     .font(.subheadline)
@@ -301,15 +313,13 @@ struct NotificationRow: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                 
-                // Approve/Deny buttons for join requests
-                if onApprove != nil || onDeny != nil {
+                if hasActions {
                     joinRequestActions
                 }
             }
             
             Spacer()
             
-            // Unread indicator
             if !notification.isRead {
                 Circle()
                     .fill(Color.appAccent)
@@ -318,9 +328,6 @@ struct NotificationRow: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
-        .onTapGesture {
-            Task { await onTap() }
-        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(notification.title). \(notification.message). \(notification.date.relativeFormatted)")
         .accessibilityHint(notification.isRead ? "Notification is read" : "Tap to mark as read")
