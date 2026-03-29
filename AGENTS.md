@@ -238,6 +238,17 @@ Schema file: `backend/src/db/schema.sql`
 
 ---
 
+## End-of-session skill review
+
+At the end of any long working session, ask OpenCode to review the conversation and propose updates to the skills in `.opencode/skills/`. This is the best time to capture new patterns and improvements while the context is still fresh.
+
+**Prompt to use:**
+> "Review our conversation and the current skills in `.opencode/skills/`. Suggest any new skills or improvements to existing ones based on what we worked through today."
+
+Skills live at `.opencode/skills/<name>/SKILL.md`. Each skill needs a `name` and `description` in its YAML frontmatter — see existing skills for the format.
+
+---
+
 ## GitHub repo
 
 `https://github.com/petras-leonardas/plank-challenge.git`
