@@ -791,7 +791,7 @@ struct APILeaderboardEntry: Decodable, Identifiable, Sendable {
     var id: String { user.id }
     let rank: Int
     let user: LeaderboardUser
-    let score: Int
+    let score: Double
     let scoreLabel: String
     let isCurrentUser: Bool
     
