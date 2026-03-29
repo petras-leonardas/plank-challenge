@@ -124,12 +124,21 @@ struct NotificationsView: View {
         }()
         
         if notification.type == "group_join_request" {
-            return AnyView(NotificationRow(
-                notification: notification,
-                onTap: { await markAsRead(id: notification.id) },
-                onApprove: { try await handleJoinRequest(notification: notification, approve: true) },
-                onDeny: { try await handleJoinRequest(notification: notification, approve: false) }
-            ))
+            // Only show action buttons on unread notifications — once read the request
+            // has already been actioned. Buttons on read notifications cause 404 errors.
+            if !notification.isRead {
+                return AnyView(NotificationRow(
+                    notification: notification,
+                    onTap: { await markAsRead(id: notification.id) },
+                    onApprove: { try await handleJoinRequest(notification: notification, approve: true) },
+                    onDeny: { try await handleJoinRequest(notification: notification, approve: false) }
+                ))
+            } else {
+                return AnyView(NotificationRow(
+                    notification: notification,
+                    onTap: { await markAsRead(id: notification.id) }
+                ))
+            }
         } else if let userId = navigateToUserId {
             return AnyView(NotificationRow(
                 notification: notification,
@@ -218,26 +227,54 @@ struct NotificationsView: View {
     }
     
     /// Handles approve/deny for a group_join_request notification.
-    /// relatedEntity.id carries "groupId:requestId" — split on ':' to get both.
-    /// Throws on failure so the row doesn't transition to confirmed state.
+    ///
+    /// New format (related_entity_type == "join_request"):
+    ///   related_entity_id == "groupId:requestId" — split on ':' to act directly.
+    ///
+    /// Legacy format (related_entity_type == "group"):
+    ///   related_entity_id == groupId only — fetch pending requests and match by
+    ///   requester name (notification title) to find the correct requestId.
+    ///
+    /// Throws on failure so the row stays in pending state.
     private func handleJoinRequest(notification: APINotification, approve: Bool) async throws {
-        guard let entity = notification.relatedEntity else { return }
-        
-        // Entity id is "groupId:requestId" encoded by the backend
-        let parts = entity.id.split(separator: ":", maxSplits: 1).map(String.init)
-        guard parts.count == 2 else { return }
-        let groupId = parts[0]
-        let requestId = parts[1]
-        
+        guard let entity = notification.relatedEntity else {
+            throw GroupServiceError.validationError("Notification has no related entity")
+        }
+
         do {
             try? await notificationService.markAsRead(id: notification.id)
-            
+
+            let groupId: String
+            let requestId: String
+
+            if entity.type == "join_request" {
+                // New format: "groupId:requestId"
+                let parts = entity.id.split(separator: ":", maxSplits: 1).map(String.init)
+                guard parts.count == 2 else {
+                    throw GroupServiceError.validationError("Malformed join_request entity id")
+                }
+                groupId = parts[0]
+                requestId = parts[1]
+            } else {
+                // Legacy format: entity.id is just the groupId.
+                // Fetch all pending requests and match by requester name (notification title).
+                groupId = entity.id
+                try await groupService.fetchJoinRequests(groupId: groupId)
+                let requesterName = notification.title
+                guard let match = groupService.currentGroupJoinRequests.first(where: {
+                    $0.user?.displayName == requesterName
+                }) ?? groupService.currentGroupJoinRequests.first else {
+                    throw GroupServiceError.validationError("No pending request found for this notification")
+                }
+                requestId = match.id
+            }
+
             if approve {
                 try await groupService.approveJoinRequest(groupId: groupId, requestId: requestId)
             } else {
                 try await groupService.denyJoinRequest(groupId: groupId, requestId: requestId)
             }
-            
+
             // Refresh in background — row already shows confirmed state locally
             try? await notificationService.fetchNotifications()
         } catch {
