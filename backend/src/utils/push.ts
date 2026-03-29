@@ -22,29 +22,40 @@
 import { SignJWT, importPKCS8 } from 'jose';
 import type { Env } from '../types/env';
 
-/** Cache the signed APNs JWT for up to 45 minutes (max valid period is 60 min) */
-let cachedJwt: string | null = null;
-let cachedJwtExpiry: number = 0;
+/**
+ * Promise-based JWT cache — prevents concurrent callers within the same isolate
+ * from all signing a new JWT simultaneously (cache stampede). Any caller that
+ * arrives while signing is in progress will await the same Promise rather than
+ * starting a second signing operation.
+ *
+ * Note: Cloudflare Workers run in isolates, so this cache is per-isolate, not
+ * shared across all Workers instances. Each cold-start will re-sign once, which
+ * is fine — the cost is negligible and the cache helps for warm requests.
+ */
+let jwtPromise: Promise<string> | null = null;
+let jwtExpiry: number = 0;
 
 async function getApnsJwt(env: Env): Promise<string> {
   const now = Date.now();
-  if (cachedJwt && now < cachedJwtExpiry) {
-    return cachedJwt;
+  // Reuse the cached Promise if it hasn't expired
+  if (jwtPromise && now < jwtExpiry) {
+    return jwtPromise;
   }
 
-  const privateKey = await importPKCS8(env.APNS_PRIVATE_KEY, 'ES256');
+  // Set the expiry immediately so concurrent callers reuse this Promise
+  // rather than each starting their own signing operation
+  jwtExpiry = now + 45 * 60 * 1000; // 45 min (APNs JWTs valid for 60 min)
 
-  const jwt = await new SignJWT({})
-    .setProtectedHeader({ alg: 'ES256', kid: env.APNS_KEY_ID })
-    .setIssuer(env.APNS_TEAM_ID)
-    .setIssuedAt()
-    .sign(privateKey);
+  jwtPromise = (async () => {
+    const privateKey = await importPKCS8(env.APNS_PRIVATE_KEY, 'ES256');
+    return new SignJWT({})
+      .setProtectedHeader({ alg: 'ES256', kid: env.APNS_KEY_ID })
+      .setIssuer(env.APNS_TEAM_ID)
+      .setIssuedAt()
+      .sign(privateKey);
+  })();
 
-  cachedJwt = jwt;
-  // Expire the cache 45 minutes from now (APNs JWTs are valid for 60 min)
-  cachedJwtExpiry = now + 45 * 60 * 1000;
-
-  return jwt;
+  return jwtPromise;
 }
 
 /**

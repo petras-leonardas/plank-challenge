@@ -193,6 +193,7 @@ struct PlankChallengeApp: App {
         userService.clearData()
         groupService.clearData()
         leaderboardService.clearData()
+        notificationService.clearData()
         
         #if DEBUG
         print("[PlankChallengeApp] Cleared all service data on logout")
