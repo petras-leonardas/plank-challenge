@@ -956,10 +956,29 @@ struct AnyCodable: Codable, @unchecked Sendable {
 
 // MARK: - Date Parsing Helpers
 
+// Reusable formatters — avoids allocating a new instance on every call.
+// The backend uses JavaScript's Date.toISOString() which always includes
+// fractional milliseconds (e.g. "2026-03-28T14:32:05.123Z"). Swift's default
+// ISO8601DateFormatter cannot parse fractional seconds, so we keep a second
+// formatter with .withFractionalSeconds and try both.
+private let _iso8601Plain: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime]
+    return f
+}()
+
+private let _iso8601Fractional: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f
+}()
+
 extension String {
-    /// Parses an ISO8601 date string to Date
+    /// Parses an ISO8601 date string to Date.
+    /// Handles both plain ("…Z") and fractional-second ("….123Z") variants
+    /// because JavaScript's Date.toISOString() always emits milliseconds.
     func toDate() -> Date? {
-        ISO8601DateFormatter().date(from: self)
+        _iso8601Fractional.date(from: self) ?? _iso8601Plain.date(from: self)
     }
     
     /// Parses an ISO8601 date string to Date, returning distant past if parsing fails
