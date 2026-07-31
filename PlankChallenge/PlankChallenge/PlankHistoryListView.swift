@@ -54,9 +54,11 @@ struct PlankHistoryListView: View {
     
     var body: some View {
         Group {
-            if plankService.isLoading && !plankService.hasLoaded {
+            if !plankService.hasLoaded {
                 PlankHistorySkeleton()
+                    .transition(.opacity)
             } else {
+                // Content with fade-in from skeleton
                 List {
                     if plankService.hasLoaded && plankService.planks.isEmpty {
                         Section {
@@ -91,6 +93,7 @@ struct PlankHistoryListView: View {
                 }
             }
         }
+        .animation(.easeInOut(duration: 0.25), value: plankService.hasLoaded)
         .alert("Couldn't load your history", isPresented: $showingHistoryError) {
             Button("Retry") {
                 historyLoadError = nil

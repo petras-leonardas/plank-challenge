@@ -41,6 +41,10 @@ CREATE TABLE IF NOT EXISTS users (
     follower_count INTEGER DEFAULT 0 CHECK (follower_count >= 0),
     following_count INTEGER DEFAULT 0 CHECK (following_count >= 0),
     
+    -- Notification preferences
+    reminder_enabled INTEGER DEFAULT 0,
+    reminder_time TEXT DEFAULT '19:00',
+    
     -- Metadata
     timezone TEXT DEFAULT 'UTC',
     created_at TEXT NOT NULL,

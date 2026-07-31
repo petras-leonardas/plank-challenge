@@ -22,8 +22,7 @@ struct OnboardingNameView: View {
     
     var body: some View {
         ZStack {
-            LinearGradient.plankGradient
-                .ignoresSafeArea()
+            AnimatedGradientBackground()
             
             VStack(spacing: 0) {
                 Spacer()
@@ -154,7 +153,7 @@ struct OnboardingNameView: View {
         defer { isSaving = false }
         
         do {
-            _ = try await userService.updateProfile(displayName: trimmed, location: nil, bio: nil, preferredPlankType: nil, plankGoalSeconds: nil)
+            _ = try await userService.updateProfile(displayName: trimmed, location: nil, bio: nil, preferredPlankType: nil, plankGoalSeconds: nil, reminderEnabled: nil, reminderTime: nil, timezone: nil)
             onContinue()
         } catch {
             errorMessage = "Couldn't save your name. Try again."

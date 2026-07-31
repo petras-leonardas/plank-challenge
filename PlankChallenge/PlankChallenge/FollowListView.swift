@@ -28,14 +28,16 @@ struct FollowListView: View {
     
     var body: some View {
         Group {
-            if userService.isLoading && users.isEmpty {
+            if !userService.hasLoaded && users.isEmpty {
                 loadingView
+                    .transition(.opacity)
             } else if users.isEmpty {
                 emptyState
             } else {
                 userList
             }
         }
+        .animation(.easeInOut(duration: 0.25), value: userService.hasLoaded)
         .navigationTitle(type.title)
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Search")

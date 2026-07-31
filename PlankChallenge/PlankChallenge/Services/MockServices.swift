@@ -110,7 +110,7 @@ final class MockUserService: UserServiceProtocol {
 
     func fetchProfile() async throws { }
     @discardableResult
-    func updateProfile(displayName: String?, location: String?, bio: String?, preferredPlankType: String?, plankGoalSeconds: Int?) async throws -> APIUser {
+    func updateProfile(displayName: String?, location: String?, bio: String?, preferredPlankType: String?, plankGoalSeconds: Int?, reminderEnabled: Bool?, reminderTime: String?, timezone: String?) async throws -> APIUser {
         guard let profile = currentUserProfile else {
             throw UserServiceError.unknown("No profile loaded in mock")
         }
@@ -245,6 +245,7 @@ final class MockAuthService: AuthServiceProtocol {
     func signUpWithEmail(email: String, password: String, displayName: String) async throws {
         isAuthenticated = true
     }
+    func checkEmail(_ email: String) async throws -> CheckEmailResponse { CheckEmailResponse(exists: false, methods: []) }
     func signInWithGoogle(presenting viewController: UIViewController) async throws { isAuthenticated = true }
     func signInWithApple(credential: ASAuthorizationAppleIDCredential) async throws { isAuthenticated = true }
     func signOut() async { isAuthenticated = false }

@@ -593,7 +593,10 @@ struct EditProfileView: View {
                 location: newLocation,
                 bio: newBio,
                 preferredPlankType: nil,
-                plankGoalSeconds: nil
+                plankGoalSeconds: nil,
+                reminderEnabled: nil,
+                reminderTime: nil,
+                timezone: nil
             )
             
             // Display name may have changed — mark leaderboard stale so the

@@ -9,10 +9,46 @@ import SwiftUI
 import SwiftData
 import UIKit
 import GoogleSignIn
+import UserNotifications
 
 // MARK: - App Delegate (APNs token registration + Google Sign-In URL handling)
 
-final class AppDelegate: NSObject, UIApplicationDelegate {
+final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
+    
+    // MARK: - Notification Tap Handler
+    
+    /// Called when the user taps a notification banner.
+    /// Navigates to the Plank tab (tab 0) for daily reminders.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        if userInfo["type"] as? String == "daily-reminder" {
+            DispatchQueue.main.async {
+                UserDefaults.standard.set(0, forKey: "selectedTab")
+            }
+        }
+        completionHandler()
+    }
+    
+    /// Show notifications even when the app is in the foreground.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
+    }
     
     /// Called when APNs successfully registers and issues a device token.
     /// We forward it to the backend via `POST /devices` so push notifications
@@ -270,6 +306,7 @@ struct PlankChallengeApp: App {
         groupService.clearData()
         leaderboardService.clearData()
         notificationService.clearData()
+        NotificationService.shared.clearPreferences()
         
         #if DEBUG
         print("[PlankChallengeApp] Cleared all service data on logout")

@@ -12,7 +12,7 @@ Execute the three-step build → install → deploy sequence to get code changes
 ## Device
 
 - **Name:** LeoDesignsTheWorld
-- **ID:** `00008150-001E444A0AD2401C`
+- **ID:** `8A63D214-B324-5FE2-97D6-0431A33F7038`
 - **Connection:** USB (must be connected and trusted)
 
 ## When to use me
@@ -34,7 +34,7 @@ cd "/Users/lbaceviciuscloudflare.com/Developer/Personal projects/plank-challenge
 xcodebuild \
   -project PlankChallenge.xcodeproj \
   -scheme PlankChallenge \
-  -destination "id=00008150-001E444A0AD2401C" \
+  -destination "id=8A63D214-B324-5FE2-97D6-0431A33F7038" \
   -configuration Debug \
   build 2>&1 | grep -E "\.swift:[0-9]+:[0-9]+: error:|BUILD SUCCEEDED|BUILD FAILED"
 ```
@@ -48,7 +48,7 @@ cd "/Users/lbaceviciuscloudflare.com/Developer/Personal projects/plank-challenge
 xcodebuild \
   -project PlankChallenge.xcodeproj \
   -scheme PlankChallenge \
-  -destination "id=00008150-001E444A0AD2401C" \
+  -destination "id=8A63D214-B324-5FE2-97D6-0431A33F7038" \
   -configuration Debug \
   install 2>&1 | tail -3
 ```
@@ -59,7 +59,7 @@ Confirm output contains `INSTALL SUCCEEDED`.
 
 ```bash
 xcrun devicectl device install app \
-  --device 00008150-001E444A0AD2401C \
+  --device 8A63D214-B324-5FE2-97D6-0431A33F7038 \
   "$(find ~/Library/Developer/Xcode/DerivedData/PlankChallenge-*/Build/Intermediates.noindex/ArchiveIntermediates/PlankChallenge/InstallationBuildProductsLocation/Applications -name 'PlankChallenge.app' | head -1)" \
   2>&1 | tail -5
 ```
@@ -81,7 +81,7 @@ cd "/Users/lbaceviciuscloudflare.com/Developer/Personal projects/plank-challenge
 xcodebuild \
   -project PlankChallenge.xcodeproj \
   -scheme PlankChallenge \
-  -destination "id=00008150-001E444A0AD2401C" \
+  -destination "id=8A63D214-B324-5FE2-97D6-0431A33F7038" \
   -configuration Debug \
   clean build 2>&1 | grep -E "\.swift:[0-9]+:[0-9]+: error:|BUILD SUCCEEDED|BUILD FAILED"
 ```

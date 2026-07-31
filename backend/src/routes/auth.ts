@@ -45,6 +45,10 @@ const refreshTokenSchema = z.object({
   refreshToken: z.string().min(1, 'Refresh token is required'),
 });
 
+const checkEmailSchema = z.object({
+  email: z.string().email('Invalid email format'),
+});
+
 const logoutSchema = z.object({
   refreshToken: z.string().min(1, 'Refresh token is required'),
 });
@@ -214,6 +218,35 @@ function formatUserResponse(user: Record<string, unknown>) {
 // ============================================
 
 /**
+ * POST /auth/check-email - Check if an email has an existing account
+ *
+ * Used by the "Continue with Email" flow to determine whether to show
+ * the sign-in or sign-up form. Returns which auth methods are available
+ * for the account (email/password, Apple, Google) so the iOS app can
+ * guide the user to the correct sign-in method.
+ */
+auth.post('/check-email', zValidator('json', checkEmailSchema), async (c) => {
+  const { email } = c.req.valid('json');
+  const db = c.env.DB;
+
+  const user = await db
+    .prepare('SELECT password_hash, apple_id, google_id FROM users WHERE email = ? AND deleted_at IS NULL')
+    .bind(email.toLowerCase())
+    .first<{ password_hash: string | null; apple_id: string | null; google_id: string | null }>();
+
+  if (!user) {
+    return success(c, { exists: false, methods: [] });
+  }
+
+  const methods: string[] = [];
+  if (user.password_hash) methods.push('email');
+  if (user.apple_id) methods.push('apple');
+  if (user.google_id) methods.push('google');
+
+  return success(c, { exists: true, methods });
+});
+
+/**
  * POST /auth/register - Email registration
  */
 auth.post('/register', zValidator('json', emailRegisterSchema), async (c) => {
@@ -305,7 +338,7 @@ auth.post('/login', zValidator('json', emailLoginSchema), async (c) => {
   
   // Check if user has password (might have signed up via Apple/Google)
   if (!user.password_hash) {
-    return errors.unauthorized(c, 'Please sign in with Apple or Google');
+    return errors.unauthorized(c, 'This account uses Apple or Google sign-in');
   }
   
   // Verify password
@@ -404,7 +437,7 @@ auth.post('/apple', zValidator('json', appleAuthSchema), async (c) => {
         // SECURITY: Don't auto-link unverified accounts
         // This could be an account takeover attempt
         console.warn(`[Apple Auth] Refusing to link unverified account: ${email.toLowerCase()}`);
-        return errors.conflict(c, 'An account with this email exists but is not verified. Please sign in with your password first.');
+        return errors.conflict(c, 'An account with this email exists but is not verified. Sign in with your password first.');
       }
     } else {
       // Create new user
@@ -530,7 +563,7 @@ auth.post('/google', zValidator('json', googleAuthSchema), async (c) => {
         // SECURITY: Don't auto-link unverified accounts
         // This could be an account takeover attempt
         console.warn(`[Google Auth] Refusing to link unverified account: ${email.toLowerCase()}`);
-        return errors.conflict(c, 'An account with this email exists but is not verified. Please sign in with your password first.');
+        return errors.conflict(c, 'An account with this email exists but is not verified. Sign in with your password first.');
       }
     } else {
       // Create new user

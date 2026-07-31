@@ -1,7 +1,12 @@
 /**
- * APNs Silent Push Utility
+ * APNs Push Utility
  *
- * Sends a content-available silent push to all registered devices for a user.
+ * Two push types:
+ *   1. Silent push (sendSilentPush) — wakes the app in the background to fetch
+ *      fresh data. No user-visible banner or sound.
+ *   2. Alert push (sendAlertPush) — displays a visible notification banner with
+ *      title, body, and sound. Used for daily plank reminders.
+ *
  * Silent pushes (no alert, no sound, content-available: 1) wake the app in the
  * background so it can fetch fresh data and update the UI without the user
  * having to pull-to-refresh.
@@ -140,5 +145,76 @@ export async function sendSilentPush(
   } catch (err) {
     // Never let push failures affect the main request flow
     console.error('[APNs] sendSilentPush error:', err);
+  }
+}
+
+/**
+ * Sends a visible alert push notification to all registered devices for a user.
+ * Displays a banner with title, body, and default sound.
+ * Fire-and-forget — errors are logged but never thrown.
+ *
+ * @param env    Worker environment (needs APNS_* secrets + DB)
+ * @param userId The recipient's user ID
+ * @param title  Notification title (e.g. "Time to plank 🔥")
+ * @param body   Notification body  (e.g. "Your streak is waiting.")
+ */
+export async function sendAlertPush(
+  env: Env,
+  userId: string,
+  title: string,
+  body: string,
+): Promise<void> {
+  try {
+    const result = await env.DB
+      .prepare('SELECT id, device_token FROM devices WHERE user_id = ? ORDER BY last_active_at DESC')
+      .bind(userId)
+      .all<{ id: string; device_token: string }>();
+
+    const devices = result.results || [];
+    if (devices.length === 0) return;
+
+    const jwt = await getApnsJwt(env);
+
+    const apnsHost = env.ENVIRONMENT === 'development'
+      ? 'api.sandbox.push.apple.com'
+      : 'api.push.apple.com';
+
+    const payload = JSON.stringify({
+      aps: {
+        alert: { title, body },
+        sound: 'default',
+      },
+      type: 'daily-reminder',
+    });
+
+    await Promise.allSettled(devices.map(async (device) => {
+      const url = `https://${apnsHost}/3/device/${device.device_token}`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'authorization': `bearer ${jwt}`,
+          'apns-topic': env.APNS_BUNDLE_ID,
+          'apns-push-type': 'alert',
+          'apns-priority': '10',  // 10 = immediate delivery for visible alerts
+          'apns-expiration': String(Math.floor(Date.now() / 1000) + 3600), // 1 hour TTL — retry if device is temporarily offline
+          'content-type': 'application/json',
+        },
+        body: payload,
+      });
+
+      if (response.status === 410) {
+        await env.DB
+          .prepare('DELETE FROM devices WHERE id = ?')
+          .bind(device.id)
+          .run();
+        console.log(`[APNs] Removed stale device token for user ${userId}`);
+      } else if (!response.ok) {
+        const respBody = await response.text().catch(() => '');
+        console.error(`[APNs] Alert push failed for device ${device.id}: ${response.status} ${respBody}`);
+      }
+    }));
+  } catch (err) {
+    console.error('[APNs] sendAlertPush error:', err);
   }
 }

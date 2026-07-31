@@ -118,7 +118,10 @@ final class UserService: UserServiceProtocol {
         location: String? = nil,
         bio: String? = nil,
         preferredPlankType: String? = nil,
-        plankGoalSeconds: Int? = nil
+        plankGoalSeconds: Int? = nil,
+        reminderEnabled: Bool? = nil,
+        reminderTime: String? = nil,
+        timezone: String? = nil
     ) async throws -> APIUser {
         isLoading = true
         error = nil
@@ -129,7 +132,10 @@ final class UserService: UserServiceProtocol {
             location: location,
             bio: bio,
             preferredPlankType: preferredPlankType,
-            plankGoalSeconds: plankGoalSeconds
+            timezone: timezone,
+            plankGoalSeconds: plankGoalSeconds,
+            reminderEnabled: reminderEnabled,
+            reminderTime: reminderTime
         )
         
         do {

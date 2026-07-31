@@ -66,6 +66,17 @@ struct AuthUser: Decodable, Sendable {
     let createdAt: String?
 }
 
+/// Request body for POST /auth/check-email
+struct CheckEmailRequest: Encodable {
+    let email: String
+}
+
+/// Response from POST /auth/check-email
+struct CheckEmailResponse: Decodable {
+    let exists: Bool
+    let methods: [String]
+}
+
 /// Response from authentication endpoints (login, register, apple auth, google auth)
 struct AuthResponse: Decodable {
     let user: AuthUser
@@ -150,6 +161,8 @@ struct APIUser: Decodable, Identifiable, Sendable, Equatable {
     let longestPlankSeconds: Double
     let followerCount: Int
     let followingCount: Int
+    let reminderEnabled: Bool
+    let reminderTime: String
     let timezone: String
     let createdAt: String
     let updatedAt: String
@@ -182,6 +195,8 @@ struct UpdateProfileRequest: Encodable {
     var timezone: String?
     /// Duration goal in seconds for countdown mode. Pass nil to clear the goal.
     var plankGoalSeconds: Int?
+    var reminderEnabled: Bool?
+    var reminderTime: String?
     
     init(
         displayName: String? = nil,
@@ -190,7 +205,9 @@ struct UpdateProfileRequest: Encodable {
         bio: String? = nil,
         preferredPlankType: String? = nil,
         timezone: String? = nil,
-        plankGoalSeconds: Int? = nil
+        plankGoalSeconds: Int? = nil,
+        reminderEnabled: Bool? = nil,
+        reminderTime: String? = nil
     ) {
         self.displayName = displayName
         self.username = username
@@ -199,6 +216,8 @@ struct UpdateProfileRequest: Encodable {
         self.preferredPlankType = preferredPlankType
         self.timezone = timezone
         self.plankGoalSeconds = plankGoalSeconds
+        self.reminderEnabled = reminderEnabled
+        self.reminderTime = reminderTime
     }
 }
 

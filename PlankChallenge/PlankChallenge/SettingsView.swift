@@ -13,8 +13,10 @@ struct SettingsView: View {
     @Environment(\.streakService) private var streakService
     @Environment(\.leaderboardService) private var leaderboardService
     
-    @State private var notificationsEnabled = true
-    @State private var reminderTime = Date()
+    @State private var notificationsEnabled = false
+    @State private var reminderTime = NotificationService.defaultReminderTime
+    @State private var showingTimePicker = false
+    @State private var didLoadNotificationPrefs = false
     @State private var showingDeletePlankConfirm = false
     @State private var isDeleting = false
     @State private var deleteError: String?
@@ -59,13 +61,35 @@ struct SettingsView: View {
                 Section("Notifications") {
                     Toggle("Daily reminder", isOn: $notificationsEnabled)
                         .accessibilityHint("Enable or disable daily plank reminders")
+                        .onChange(of: notificationsEnabled) { _, enabled in
+                            guard didLoadNotificationPrefs else { return }
+                            let service = NotificationService.shared
+                            if enabled {
+                                Task {
+                                    let granted = await service.requestAuthorization()
+                                    if granted {
+                                        service.scheduleDailyReminder(at: reminderTime)
+                                    } else {
+                                        notificationsEnabled = false
+                                    }
+                                }
+                            } else {
+                                service.cancelDailyReminder()
+                            }
+                        }
                     
                     if notificationsEnabled {
-                        DatePicker(
-                            "Reminder Time",
-                            selection: $reminderTime,
-                            displayedComponents: .hourAndMinute
-                        )
+                        Button {
+                            showingTimePicker = true
+                        } label: {
+                            HStack {
+                                Text("Reminder time")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Text(reminderTime, style: .time)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                         .accessibilityLabel("Set reminder time")
                     }
                 }
@@ -177,6 +201,22 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .onAppear {
+                let service = NotificationService.shared
+                notificationsEnabled = service.isReminderEnabled
+                reminderTime = service.reminderTime
+                didLoadNotificationPrefs = true
+            }
+            .sheet(isPresented: $showingTimePicker) {
+                ReminderTimePickerSheet(
+                    selectedTime: reminderTime,
+                    onSave: { newTime in
+                        reminderTime = newTime
+                        NotificationService.shared.scheduleDailyReminder(at: newTime)
+                    }
+                )
+                .presentationDetents([.medium])
+            }
             // Confirm delete today's plank
             .alert("Delete today's plank?", isPresented: $showingDeletePlankConfirm) {
                 Button("Cancel", role: .cancel) { }
@@ -284,6 +324,52 @@ struct SettingsView: View {
         }
     }
     
+}
+
+// MARK: - Reminder Time Picker Sheet
+
+/// A half-sheet with a wheel time picker and Save/Cancel buttons.
+private struct ReminderTimePickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    let selectedTime: Date
+    let onSave: (Date) -> Void
+    
+    @State private var pickerTime: Date = Date()
+    
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                DatePicker(
+                    "Reminder time",
+                    selection: $pickerTime,
+                    displayedComponents: .hourAndMinute
+                )
+                .datePickerStyle(.wheel)
+                .labelsHidden()
+                .padding(.top, 8)
+                
+                Spacer()
+            }
+            .navigationTitle("Reminder time")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(pickerTime)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+        .onAppear {
+            pickerTime = selectedTime
+        }
+    }
 }
 
 #Preview {

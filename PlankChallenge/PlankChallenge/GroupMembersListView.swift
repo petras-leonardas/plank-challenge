@@ -16,14 +16,16 @@ struct GroupMembersListView: View {
     
     var body: some View {
         Group {
-            if groupService.isLoading && groupService.currentGroupMembers.isEmpty {
+            if !groupService.hasLoaded && groupService.currentGroupMembers.isEmpty {
                 loadingView
+                    .transition(.opacity)
             } else if groupService.currentGroupMembers.isEmpty {
                 emptyState
             } else {
                 membersList
             }
         }
+        .animation(.easeInOut(duration: 0.25), value: groupService.hasLoaded)
         .navigationTitle("Members")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Search members")

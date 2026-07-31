@@ -17,6 +17,7 @@ import mediaRoutes from './routes/media';
 import groupRoutes from './routes/groups';
 import leaderboardRoutes from './routes/leaderboards';
 import deviceRoutes from './routes/devices';
+import legalRoutes from './routes/legal';
 
 // Create the main Hono app
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -162,6 +163,7 @@ app.route('/media', mediaRoutes);
 app.route('/groups', groupRoutes);
 app.route('/leaderboards', leaderboardRoutes);
 app.route('/devices', deviceRoutes);
+app.route('/legal', legalRoutes);
 
 // ============================================
 // 404 HANDLER
@@ -181,4 +183,24 @@ app.notFound((c) => {
   }, 404);
 });
 
-export default app;
+// ============================================
+// EXPORTS — fetch (HTTP) + scheduled (cron)
+// ============================================
+
+import { handleReminders } from './scheduled/reminders';
+
+export default {
+  fetch: app.fetch,
+
+  /**
+   * Cron handler — runs every 5 minutes.
+   * Sends daily plank reminders to users who haven't planked yet.
+   */
+  async scheduled(
+    _event: ScheduledEvent,
+    env: Env,
+    ctx: ExecutionContext,
+  ) {
+    ctx.waitUntil(handleReminders(env));
+  },
+};

@@ -69,216 +69,9 @@ struct GroupTiedAvatarStack: View {
                         .foregroundStyle(Color.appAccent)
                 }
                 .overlay(Circle().stroke(Color.warmWhiteCard, lineWidth: 2))
-            }
-        }
-    }
-}
-
-// MARK: - Group Tied Users List View
-
-struct GroupTiedUsersListView: View {
-    let group: GroupRankedGroup
-    let metric: GroupDetailView.LeaderboardType
-
-    var body: some View {
-        ZStack {
-            AppBackground()
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(Array(group.entries.enumerated()), id: \.element.id) { index, entry in
-                        NavigationLink {
-                            UserProfileView(userId: entry.user.id)
-                        } label: {
-                            GroupLeaderboardRow(entry: entry, isCurrentUser: group.containsCurrentUser && entry.user.id == group.entries.first?.user.id, metric: metric)
-                        }
-                        .buttonStyle(.plain)
-                        if index < group.entries.count - 1 {
-                            Divider().padding(.leading, 60)
-                        }
-                    }
-                }
-                .padding(.vertical)
-            }
-        }
-        .navigationTitle("Rank #\(group.rank)")
-        .navigationBarTitleDisplayMode(.inline)
-        .appNavigationBarStyle()
-    }
-}
-
-struct GroupDetailView: View {
-    let groupId: String
-    
-    @Environment(\.groupService) private var groupService
-    @Environment(\.leaderboardService) private var leaderboardService
-    @Environment(\.dismiss) private var dismiss
-    
-    @State private var selectedLeaderboard: LeaderboardType = .streak
-    @State private var isJoining = false
-    @State private var actionError: Error?
-    @State private var showingActionError = false
-    /// Set to true once loadGroupData() has completed at least once.
-    /// Used to guard .task(id: selectedLeaderboard) against firing before
-    /// the initial group load has finished.
-    @State private var hasInitiallyLoaded = false
-    @State private var showingSettings = false
-    @State private var showingMemberSettings = false
-    
-    enum LeaderboardType: String, CaseIterable {
-        case streak = "Streak"
-        case longestPlank = "Longest"
-    }
-    
-    var body: some View {
-        ZStack {
-            AppBackground()
-            
-            Group {
-                if groupService.isLoading && groupService.currentGroup == nil {
-                    loadingView
-                } else if let error = groupService.error, groupService.currentGroup == nil {
-                    ErrorView(error: error) {
-                        await loadGroupData()
-                    }
-                } else if let group = groupService.currentGroup {
-                    groupContent(group)
-                } else {
-                    // Fallback empty state
-                    Text("Group not found")
-                    .foregroundStyle(.secondary)
                 }
             }
         }
-        .navigationTitle(groupService.currentGroup?.name ?? "Group")
-        .navigationBarTitleDisplayMode(.inline)
-        .appNavigationBarStyle()
-        .toolbar {
-            if groupService.isCurrentUserAdmin {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showingSettings = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                    .accessibilityLabel("Group settings")
-                }
-            } else if groupService.isCurrentUserMember {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showingMemberSettings = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                    .accessibilityLabel("Group options")
-                }
-            }
-        }
-        .sheet(isPresented: $showingSettings) {
-            GroupSettingsView(groupId: groupId)
-        }
-        .sheet(isPresented: $showingMemberSettings) {
-            MemberGroupSettingsView(groupId: groupId)
-        }
-        // When the settings sheet closes after a delete, currentGroup will be nil.
-        // Pop back to the groups list automatically.
-        .onChange(of: showingSettings) { _, isShowing in
-            if !isShowing && groupService.currentGroup == nil && !groupService.isLoading {
-                dismiss()
-            }
-        }
-        .alert("Something went wrong", isPresented: $showingActionError) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(actionError?.localizedDescription ?? "Couldn't complete that action. Try again.")
-        }
-        .refreshable {
-            await loadGroupData()
-        }
-        .task {
-            await loadGroupData()
-        }
-        // Re-fetches leaderboard and cancels the previous fetch whenever the
-        // leaderboard type picker changes — prevents racing concurrent fetches.
-        // hasInitiallyLoaded guards against firing before the initial group load
-        // has completed (avoids a race with the initial .task above).
-        .task(id: selectedLeaderboard) {
-            guard hasInitiallyLoaded else { return }
-            await loadLeaderboard()
-        }
-        .onDisappear {
-            groupService.clearCurrentGroup()
-        }
-    }
-    
-    // MARK: - Subviews
-    
-    private var loadingView: some View {
-        GroupDetailSkeleton()
-    }
-    
-    private func groupContent(_ group: APIGroup) -> some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                // Header
-                groupHeader(group)
-                
-                // Leaderboard section (shows members + their stats)
-                leaderboardSection
-                
-                // Actions
-                actionsSection(group)
-            }
-            .padding()
-        }
-    }
-    
-    // MARK: - Header
-    
-    private func groupHeader(_ group: APIGroup) -> some View {
-        VStack(spacing: 12) {
-            // Group image
-            ZStack {
-                Circle()
-                    .fill(Color.appAccent.opacity(0.2))
-                    .frame(width: 80, height: 80)
-                
-                if let imageUrl = group.imageUrl, let url = URL(string: imageUrl) {
-                    // circle clip: use a large cornerRadius to approximate circle within CachedGroupImage
-                    CachedGroupImage(url: url, size: 80, cornerRadius: 40)
-                } else {
-                    Image(systemName: "person.3.fill")
-                        .font(.largeTitle)
-                        .foregroundStyle(Color.appAccent)
-                }
-            }
-            
-            // Group info
-            VStack(spacing: 4) {
-                HStack {
-                    Text(group.name)
-                        .font(.title2)
-                        .fontWeight(.bold)
-                    
-                    if group.isPrivate {
-                        Image(systemName: "lock.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                
-                Text("\(group.memberCount) members")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            
-            // Description
-            if let description = group.description, !description.isEmpty {
-                Text(description)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .frame(maxWidth: .infinity)
         .appCardStyle()
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(group.name), \(group.memberCount) members")
@@ -297,8 +90,9 @@ struct GroupDetailView: View {
             .pickerStyle(.segmented)
             
             // Leaderboard list
-            if leaderboardService.isLoading && leaderboardService.groupLeaderboard.isEmpty {
+            if !leaderboardService.hasLoaded && leaderboardService.groupLeaderboard.isEmpty {
                 GroupLeaderboardSectionSkeleton()
+                    .transition(.opacity)
             } else if let leaderboardError = leaderboardService.error {
                 // Leaderboard-only error — show inline rather than blocking the whole screen
                 Text("Couldn't load leaderboard: \(leaderboardError.localizedDescription)")
@@ -365,6 +159,7 @@ struct GroupDetailView: View {
                 }
             }
         }
+        .animation(.easeInOut(duration: 0.25), value: leaderboardService.hasLoaded)
         .appCardStyle()
     }
     

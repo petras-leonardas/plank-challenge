@@ -81,30 +81,14 @@ final class AuthService: AuthServiceProtocol {
         return nil
     }
     
-    /// Whether the current user is newly created and needs to complete onboarding.
+    /// Whether the current user needs to complete onboarding.
     ///
-    /// Returns true if EITHER:
-    /// - The account was created within the last 120 seconds (new sign-up)
-    /// - The device-local onboarding flag has not been set
-    ///
-    /// This ensures that even if a user deletes their account and creates a new one,
-    /// they always see onboarding regardless of the device's UserDefaults state.
+    /// Relies on the device-local `hasCompletedOnboarding` flag in UserDefaults.
+    /// Sign-up flows reset this flag to `false` so new accounts always see onboarding,
+    /// even on a device where a previous account already completed it.
     var needsOnboarding: Bool {
         guard case .authenticated = state else { return false }
-        
-        let hasCompletedKey = AppConfig.UserDefaultsKeys.hasCompletedOnboarding
-        let hasCompleted = UserDefaults.standard.bool(forKey: hasCompletedKey)
-        
-        // If account was created recently (within 2 minutes) → always show onboarding
-        if let createdAtString = currentUser?.createdAt,
-           let createdAt = ISO8601DateFormatter().date(from: createdAtString) {
-            let secondsSinceCreation = Date().timeIntervalSince(createdAt)
-            if secondsSinceCreation < 120 {
-                return true
-            }
-        }
-        
-        // Otherwise fall back to the local flag
+        let hasCompleted = UserDefaults.standard.bool(forKey: AppConfig.UserDefaultsKeys.hasCompletedOnboarding)
         return !hasCompleted
     }
     
@@ -273,7 +257,7 @@ final class AuthService: AuthServiceProtocol {
                 expiresIn: response.expiresIn
             )
             
-            // Update state
+            resetOnboardingIfNewAccount(response.user)
             state = .authenticated(response.user)
             
         } catch let apiError as APIClientError {
@@ -370,6 +354,7 @@ final class AuthService: AuthServiceProtocol {
                 expiresIn: response.expiresIn
             )
             
+            resetOnboardingIfNewAccount(response.user)
             state = .authenticated(response.user)
             print("[GoogleAuth] Step 4 — state set to authenticated")
             
@@ -389,6 +374,18 @@ final class AuthService: AuthServiceProtocol {
     }
     
     // MARK: - Email Authentication
+    
+    /// Checks whether an email address has an existing account and which
+    /// sign-in methods are available (email/password, Apple, Google).
+    func checkEmail(_ email: String) async throws -> CheckEmailResponse {
+        let request = CheckEmailRequest(email: email)
+        let response: CheckEmailResponse = try await APIClient.shared.post(
+            "/auth/check-email",
+            body: request,
+            requiresAuth: false
+        )
+        return response
+    }
     
     /// Signs in with email and password
     /// - Parameters:
@@ -427,6 +424,25 @@ final class AuthService: AuthServiceProtocol {
         }
     }
     
+    /// Resets the onboarding flag so new accounts see the onboarding flow,
+    /// even on a device where a previous account already completed it.
+    private func resetOnboardingForNewAccount() {
+        UserDefaults.standard.set(false, forKey: AppConfig.UserDefaultsKeys.hasCompletedOnboarding)
+    }
+    
+    /// Resets onboarding if the account was just created (within 10 seconds).
+    /// Used for Apple/Google sign-in where the same endpoint handles both
+    /// new account creation and existing account login.
+    private func resetOnboardingIfNewAccount(_ user: AuthUser) {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let createdAtString = user.createdAt,
+           let createdAt = formatter.date(from: createdAtString),
+           Date().timeIntervalSince(createdAt) < 10 {
+            resetOnboardingForNewAccount()
+        }
+    }
+    
     /// Creates a new account with email and password
     /// - Parameters:
     ///   - email: User's email address
@@ -456,6 +472,10 @@ final class AuthService: AuthServiceProtocol {
                 refresh: response.refreshToken,
                 expiresIn: response.expiresIn
             )
+            
+            // New account — ensure onboarding runs even if a previous
+            // account on this device already completed it.
+            resetOnboardingForNewAccount()
             
             // Update state
             state = .authenticated(response.user)

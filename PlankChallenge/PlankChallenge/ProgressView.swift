@@ -120,8 +120,9 @@ struct PlankProgressView: View {
                 showingAllBadges = true
             })
 
-            if badgeService.isLoading && !badgeService.hasLoaded {
+            if !badgeService.hasLoaded {
                 BadgesSectionSkeleton()
+                    .transition(.opacity)
             } else if badgeService.hasLoaded && widgetBadges.isEmpty {
                 Text("Keep planking to earn badges")
                     .font(.subheadline)
@@ -147,8 +148,9 @@ struct PlankProgressView: View {
                 showingPlankHistory = true
             })
             
-            if plankService.isLoading && !plankService.hasLoaded {
+            if !plankService.hasLoaded {
                 RecentPlanksSectionSkeleton()
+                    .transition(.opacity)
             } else if plankService.hasLoaded && plankService.planks.isEmpty {
                 Text("No planks yet — your first one is the hardest")
                     .font(.subheadline)

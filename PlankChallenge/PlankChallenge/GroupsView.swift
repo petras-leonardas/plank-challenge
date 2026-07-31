@@ -29,16 +29,20 @@ struct GroupsView: View {
                 AppBackground()
 
                 Group {
-                    if groupService.isLoading && !groupService.hasLoaded {
+                    if !groupService.hasLoaded {
                         GroupsSkeleton()
-                    } else if let error = groupService.error, !groupService.hasLoaded {
+                            .transition(.opacity)
+                    } else if let error = groupService.error {
                         ErrorView(error: error) {
                             await loadData()
                         }
+                        .transition(.opacity)
                     } else {
                         contentView
+                            .transition(.opacity)
                     }
                 }
+                .animation(.easeInOut(duration: 0.25), value: groupService.hasLoaded)
             }
             .navigationTitle("Groups")
             .appNavigationBarStyle()

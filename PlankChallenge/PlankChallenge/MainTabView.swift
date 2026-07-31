@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct MainTabView: View {
-    @State private var selectedTab = 0
+    @AppStorage("selectedTab") private var selectedTab = 0
     @Environment(\.notificationService) private var notificationService
     @Environment(\.groupService) private var groupService
     @Environment(\.scenePhase) private var scenePhase

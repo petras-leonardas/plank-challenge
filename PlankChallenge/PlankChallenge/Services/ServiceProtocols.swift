@@ -104,7 +104,7 @@ protocol UserServiceProtocol: AnyObject {
 
     // MARK: Methods
     func fetchProfile() async throws
-    func updateProfile(displayName: String?, location: String?, bio: String?, preferredPlankType: String?, plankGoalSeconds: Int?) async throws -> APIUser
+    func updateProfile(displayName: String?, location: String?, bio: String?, preferredPlankType: String?, plankGoalSeconds: Int?, reminderEnabled: Bool?, reminderTime: String?, timezone: String?) async throws -> APIUser
     func searchUsers(query: String) async throws
     func clearSearchResults()
     func fetchSuggestedUsers() async throws
@@ -208,6 +208,7 @@ protocol AuthServiceProtocol: AnyObject {
 
     // MARK: Methods
     func restoreSession() async
+    func checkEmail(_ email: String) async throws -> CheckEmailResponse
     func signInWithEmail(email: String, password: String) async throws
     func signUpWithEmail(email: String, password: String, displayName: String) async throws
     func signInWithGoogle(presenting viewController: UIViewController) async throws

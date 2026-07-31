@@ -12,7 +12,7 @@ Plank Challenge is an iOS fitness app for daily plank streak tracking. The core 
 
 The owner works with a **physical iPhone connected via USB**. All changes are built and deployed directly to the device — there is no simulator workflow.
 
-**Device:** "LeoDesignsTheWorld" — ID `00008150-001E444A0AD2401C`
+**Device:** "LeoDesignsTheWorld" — ID `8A63D214-B324-5FE2-97D6-0431A33F7038`
 
 ### Build and install iOS to device
 
@@ -23,7 +23,7 @@ The owner works with a **physical iPhone connected via USB**. All changes are bu
 xcodebuild \
   -project PlankChallenge.xcodeproj \
   -scheme PlankChallenge \
-  -destination "id=00008150-001E444A0AD2401C" \
+  -destination "id=8A63D214-B324-5FE2-97D6-0431A33F7038" \
   -configuration Debug \
   build 2>&1 | grep -E "error:|BUILD SUCCEEDED|BUILD FAILED"
 
@@ -31,13 +31,13 @@ xcodebuild \
 xcodebuild \
   -project PlankChallenge.xcodeproj \
   -scheme PlankChallenge \
-  -destination "id=00008150-001E444A0AD2401C" \
+  -destination "id=8A63D214-B324-5FE2-97D6-0431A33F7038" \
   -configuration Debug \
   install
 
 # Step 3 — deploy to device
 xcrun devicectl device install app \
-  --device 00008150-001E444A0AD2401C \
+  --device 8A63D214-B324-5FE2-97D6-0431A33F7038 \
   "$(find ~/Library/Developer/Xcode/DerivedData/PlankChallenge-*/Build/Intermediates.noindex/ArchiveIntermediates/PlankChallenge/InstallationBuildProductsLocation/Applications -name 'PlankChallenge.app' | head -1)"
 ```
 
@@ -173,6 +173,25 @@ Add to the appropriate file in `backend/src/routes/`. Use `zValidator('json', sc
 
 ### Period values for leaderboard endpoints
 Both the global and group leaderboard endpoints use the same period values: `"week"`, `"month"`, `"all"`. The iOS `LeaderboardPeriod` enum raw values must match these exactly.
+
+### Cloudflare WARP + iOS Simulator TLS
+
+The owner's Mac runs Cloudflare WARP, which intercepts TLS traffic using its own root CA. The physical iPhone is unaffected, but the iOS Simulator shares the Mac's network and will get **"A TLS error caused the secure connection to fail"** unless the WARP root certificate is trusted in the simulator.
+
+**Two layers of fix are in place — both are required:**
+
+1. **ATS exception in `GoogleSignIn-Info.plist`** — disables the Forward Secrecy requirement for `workers.dev` so ATS doesn't reject WARP's cipher negotiation.
+
+2. **WARP root cert installed in the simulator keychain** — this is what actually resolves the TLS trust failure. The cert lives on disk and must be installed into each simulator that needs it:
+
+```bash
+xcrun simctl keychain <SIMULATOR_UDID> add-root-cert \
+  "$HOME/.local/share/cloudflare-warp-certs/CloudflareRootCertificate.pem"
+```
+
+**When this comes up:** after erasing a simulator, creating a new simulator, or updating Xcode (which can reset simulator keychains). If login fails with a TLS error on the simulator, re-run the cert install command above and restart the app.
+
+**Do not** add a `URLSessionDelegate` trust bypass to `APIClient` — it's unnecessary when the root cert is properly installed and is overly permissive.
 
 ### LSP errors in the editor
 The LSP often shows false "Cannot find type" errors in Swift files because it lacks full project context. Ignore these — they are not real compile errors. Trust the actual `xcodebuild` output to determine if the build succeeds.

@@ -19,9 +19,10 @@ struct MyGroupsListView: View {
             AppBackground()
             
             Group {
-                if groupService.isLoading && !groupService.hasLoaded {
+                if !groupService.hasLoaded {
                     loadingView
-                } else if let error = groupService.error, !groupService.hasLoaded {
+                        .transition(.opacity)
+                } else if let error = groupService.error {
                     // Show error state if we failed to load
                     ErrorView(error: error) {
                         await refreshGroups()
@@ -32,6 +33,7 @@ struct MyGroupsListView: View {
                     groupsList
                 }
             }
+            .animation(.easeInOut(duration: 0.25), value: groupService.hasLoaded)
         }
         .navigationTitle("My Groups")
         .navigationBarTitleDisplayMode(.inline)

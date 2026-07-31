@@ -144,8 +144,9 @@ struct RankingsContent: View {
             .padding(.top, 16)
             .padding(.bottom, 12)
 
-            if leaderboardService.isLoading && !leaderboardService.hasLoaded {
+            if !leaderboardService.hasLoaded {
                 RankingsCardSkeleton()
+                    .transition(.opacity)
                     .padding(.bottom, 12)
             } else if entries.isEmpty {
                 Text("No data yet")
@@ -229,8 +230,9 @@ struct FullLeaderboardListView: View {
             AppBackground()
 
             Group {
-                if leaderboardService.isLoading && entries.isEmpty {
+                if !leaderboardService.hasLoaded && entries.isEmpty {
                     LeaderboardSkeleton()
+                        .transition(.opacity)
                 } else if entries.isEmpty {
                     EmptyStateView(
                         icon: "trophy",

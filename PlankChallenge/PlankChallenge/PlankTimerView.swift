@@ -64,10 +64,8 @@ struct PlankTimerView: View {
     @State private var timerMode: TimerMode = .free
     
     // MARK: - Shifting background gradient
-    // Continuously cycles through Color.plankPhaseBottomColors, 30s per transition.
-    @State private var currentBottomColor: Color = Color.plankPhaseBottomColors[0]
+    // Driven by AnimatedGradientBackground — glow color synced via callback.
     @State private var currentGlowColor: Color = Color.plankPhaseGlowColors[0]
-    @State private var gradientTask: Task<Void, Never>?
     
     // Goal duration stored locally and synced to backend
     @AppStorage("plankGoalSeconds") private var storedGoalSeconds: Int = 60
@@ -149,12 +147,9 @@ struct PlankTimerView: View {
             
             ZStack {
                 // Full screen gradient background — animates between phase colors
-                LinearGradient(
-                    colors: [Color.plankGradientStart, currentBottomColor],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                AnimatedGradientBackground { glowColor in
+                    currentGlowColor = glowColor
+                }
                 
                 // Celebration/CompletedToday: Lava lamp bubbles + overlay effects
                 if timerState.showsCelebrationBubbles {
@@ -249,10 +244,6 @@ struct PlankTimerView: View {
             // Seed wheel picker from stored goal
             selectedMinutes = storedGoalSeconds / 60
             selectedSeconds = storedGoalSeconds % 60
-            startGradientCycle()
-        }
-        .onDisappear {
-            cleanup()
         }
         .onDisappear {
             cleanup()
@@ -486,25 +477,32 @@ struct PlankTimerView: View {
         VStack(spacing: 8) {
             // Streak info for ready and completedToday states - positioned just above button
             if timerState == .ready || timerState == .completedToday {
-                HStack(spacing: 8) {
-                    // Animated flame when streak is protected (completedToday)
-                    AnimatedFlameIcon(isAnimating: timerState == .completedToday)
-                        .font(.title2)
-                    if timerState == .ready {
-                        if streakService.currentStreak > 0 {
-                            Text("Protect your \(streakService.currentStreak)-day streak")
+                if !streakService.hasLoaded {
+                    // Skeleton shimmer while streak data loads
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(.white.opacity(0.1))
+                        .frame(width: 200, height: 24)
+                        .shimmer()
+                } else {
+                    HStack(spacing: 8) {
+                        // Animated flame when streak is protected (completedToday)
+                        AnimatedFlameIcon(isAnimating: timerState == .completedToday)
+                            .font(.title2)
+                        if timerState == .ready {
+                            if streakService.currentStreak > 0 {
+                                Text("Protect your \(streakService.currentStreak)-day streak")
+                            } else {
+                                Text("Start your streak today")
+                            }
                         } else {
-                            Text("Start your streak today")
+                            Text("\(streakService.currentStreak)-day streak")
                         }
-                    } else {
-                        Text("\(streakService.currentStreak)-day streak")
                     }
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+                    .transition(.opacity)
                 }
-                .font(.title3)
-                .fontWeight(.semibold)
-                .foregroundStyle(.white)
-                .id(instructionKey)
-                .transition(.opacity)
             }
             
             // Main title with slide transition (only shown when not nil)
@@ -1042,41 +1040,7 @@ struct PlankTimerView: View {
         saveTask = nil
         goalSyncTask?.cancel()
         goalSyncTask = nil
-        gradientTask?.cancel()
-        gradientTask = nil
         timerService.stop()
-    }
-    
-    // MARK: - Shifting Background Gradient
-    
-    /// Starts a continuous async loop that steps through gradient phases.
-    /// No hold period — transitions fire back-to-back, each taking 30s.
-    /// Phase index is tracked locally inside the Task (not via @State) to avoid
-    /// the SwiftUI struct-copy mutation trap.
-    private func startGradientCycle() {
-        gradientTask?.cancel()
-        gradientTask = Task {
-            var phase = 0
-            do {
-                while !Task.isCancelled {
-                    // Advance to the next phase
-                    phase = (phase + 1) % Color.plankPhaseBottomColors.count
-                    let nextBottom = Color.plankPhaseBottomColors[phase]
-                    let nextGlow = Color.plankPhaseGlowColors[phase]
-                    // Animate the color change on the main actor
-                    await MainActor.run {
-                        withAnimation(.linear(duration: 20)) {
-                            currentBottomColor = nextBottom
-                            currentGlowColor = nextGlow
-                        }
-                    }
-                    // Wait exactly 20s before starting the next transition
-                    try await Task.sleep(nanoseconds: 20_000_000_000)
-                }
-            } catch {
-                // Task cancelled on cleanup — nothing to do
-            }
-        }
     }
 }
 

@@ -21,6 +21,8 @@ const updateProfileSchema = z.object({
   preferredPlankType: z.enum(['elbow', 'straightArm', 'parallettes']).optional(),
   timezone: z.string().optional(),
   plankGoalSeconds: z.number().int().positive().optional().nullable(),
+  reminderEnabled: z.boolean().nullish(),
+  reminderTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).nullish(),
 });
 
 // ============================================
@@ -94,6 +96,8 @@ function formatUser(user: UserRecord) {
     followerCount: user.follower_count || 0,
     followingCount: user.following_count || 0,
     timezone: user.timezone || 'UTC',
+    reminderEnabled: Boolean(user.reminder_enabled),
+    reminderTime: user.reminder_time || '19:00',
     createdAt: user.created_at,
     updatedAt: user.updated_at,
   };
@@ -224,6 +228,16 @@ users.patch('/me', authMiddleware, zValidator('json', updateProfileSchema), asyn
   if (updates.plankGoalSeconds !== undefined) {
     fields.push('plank_goal_seconds = ?');
     values.push(updates.plankGoalSeconds);
+  }
+  
+  if (updates.reminderEnabled != null) {
+    fields.push('reminder_enabled = ?');
+    values.push(updates.reminderEnabled ? 1 : 0);
+  }
+  
+  if (updates.reminderTime != null) {
+    fields.push('reminder_time = ?');
+    values.push(updates.reminderTime);
   }
   
   if (fields.length === 0) {

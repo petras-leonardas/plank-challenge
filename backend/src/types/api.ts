@@ -194,6 +194,8 @@ export interface UserRecord {
   longest_plank_seconds: number;
   follower_count: number;
   following_count: number;
+  reminder_enabled: number;
+  reminder_time: string;
   timezone: string;
   created_at: string;
   updated_at: string;

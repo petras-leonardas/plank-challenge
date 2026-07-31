@@ -107,12 +107,13 @@ extension Color {
     // Each phase has a bottom gradient color and a matching button glow color (lighter/brighter).
     
     /// Bottom gradient colors for each phase (top is always plankGradientStart).
-    /// Pastel cycle: blue → yellow → green → pink → back to blue.
+    /// Deep jewel tones: blue → gold → teal → rose → back to blue.
+    /// Darkened to ensure white text meets WCAG AA contrast at all phases.
     static let plankPhaseBottomColors: [Color] = [
-        Color(red:  80/255, green: 140/255, blue: 255/255), // Phase 0: Pastel blue    #508CFF
-        Color(red: 220/255, green: 200/255, blue:  80/255), // Phase 1: Pastel yellow  #DCC850
-        Color(red:  80/255, green: 200/255, blue: 140/255), // Phase 2: Pastel green   #50C88C
-        Color(red: 230/255, green: 110/255, blue: 170/255), // Phase 3: Pastel pink    #E66EAA
+        Color(red:  30/255, green:  55/255, blue: 110/255), // Phase 0: Deep blue      #1E376E
+        Color(red:  90/255, green:  80/255, blue:  30/255), // Phase 1: Deep gold      #5A501E
+        Color(red:  25/255, green:  80/255, blue:  60/255), // Phase 2: Deep teal      #19503C
+        Color(red:  95/255, green:  40/255, blue:  70/255), // Phase 3: Deep rose      #5F2846
     ]
     
     /// Button glow colors for each phase — slightly brighter version of the bottom hue

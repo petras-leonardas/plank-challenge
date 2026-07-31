@@ -25,12 +25,12 @@ struct ShimmerModifier: ViewModifier {
                 LinearGradient(
                     gradient: Gradient(stops: [
                         .init(color: .clear,               location: 0.0),
-                        .init(color: .white.opacity(0.55), location: 0.45),
-                        .init(color: .white.opacity(0.55), location: 0.55),
+                        .init(color: .white.opacity(0.25), location: 0.4),
+                        .init(color: .white.opacity(0.25), location: 0.6),
                         .init(color: .clear,               location: 1.0),
                     ]),
-                    startPoint: UnitPoint(x: phase,     y: 0),
-                    endPoint:   UnitPoint(x: phase + 1, y: 0)
+                    startPoint: UnitPoint(x: phase,     y: 0.3),
+                    endPoint:   UnitPoint(x: phase + 1, y: 0.7)
                 )
                 // Extend the gradient beyond the view bounds so the sweep
                 // fully enters and exits rather than snapping.

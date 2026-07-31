@@ -80,8 +80,9 @@ struct SearchView: View {
         VStack(alignment: .leading, spacing: 12) {
             AppSectionHeader<EmptyView>(title: "SUGGESTED PEOPLE")
             
-            if userService.isLoading && userService.suggestedUsers.isEmpty {
+            if !userService.hasLoaded && userService.suggestedUsers.isEmpty {
                 SuggestedPeopleSkeleton()
+                    .transition(.opacity)
             } else if userService.suggestedUsers.isEmpty {
                 // Empty state — prompt user to search
                 VStack(spacing: 8) {

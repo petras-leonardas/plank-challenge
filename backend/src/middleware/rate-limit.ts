@@ -45,6 +45,12 @@ interface WindowData {
 
 export const RATE_LIMITS: Record<string, RateLimitConfig> = {
   // Auth endpoints - strict limits to prevent brute force
+  'auth:check-email': {
+    endpointType: 'auth:check-email',
+    windowSeconds: 60,
+    maxRequests: 10,
+    blockDurationSeconds: 300, // 5 minute block
+  },
   'auth:login': {
     endpointType: 'auth:login',
     windowSeconds: 60,
@@ -359,6 +365,7 @@ export function getClientIdentifier(c: Context<{ Bindings: Env; Variables: Varia
  */
 export function getRateLimitType(method: string, path: string): string | null {
   // Auth endpoints
+  if (path === '/auth/check-email') return 'auth:check-email';
   if (path === '/auth/login') return 'auth:login';
   if (path === '/auth/register') return 'auth:register';
   if (path === '/auth/refresh') return 'auth:refresh';
@@ -449,7 +456,7 @@ export async function rateLimitMiddleware(
   const method = c.req.method;
   
   // Skip rate limiting for health checks
-  if (path === '/' || path === '/health') {
+  if (path === '/' || path === '/health' || path.startsWith('/legal')) {
     return next();
   }
   

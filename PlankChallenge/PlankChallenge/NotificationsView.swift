@@ -19,18 +19,23 @@ struct NotificationsView: View {
     
     var body: some View {
         Group {
-            if notificationService.isLoading && !notificationService.hasLoaded {
+            if !notificationService.hasLoaded {
                 loadingView
-            } else if let error = notificationService.error, !notificationService.hasLoaded {
+                    .transition(.opacity)
+            } else if let error = notificationService.error {
                 ErrorView(error: error) {
                     await fetchNotifications()
                 }
+                .transition(.opacity)
             } else if notificationService.notifications.isEmpty {
                 emptyState
+                    .transition(.opacity)
             } else {
                 notificationsList
+                    .transition(.opacity)
             }
         }
+        .animation(.easeInOut(duration: 0.25), value: notificationService.hasLoaded)
         .navigationTitle("Notifications")
         .navigationDestination(isPresented: Binding(
             get: { navigatingToUserId != nil },

@@ -10,8 +10,7 @@ struct AuthenticationView: View {
     @State private var isSigningInWithApple = false
     @State private var showError = false
     @State private var errorMessage: String?
-    @State private var showEmailSignIn = false
-    @State private var showEmailSignUp = false
+    @State private var showEmailContinue = false
     
     var body: some View {
         GeometryReader { geometry in
@@ -30,7 +29,7 @@ struct AuthenticationView: View {
                     signInButtonsSection
                     
                     // Sign up link
-                    signUpSection
+                    termsSection
                     
                     Spacer()
                         .frame(minHeight: 40)
@@ -38,7 +37,7 @@ struct AuthenticationView: View {
                 .frame(minHeight: geometry.size.height)
             }
         }
-        .background(AppBackground())
+        .background(AnimatedGradientBackground())
         .alert("Couldn't sign you in", isPresented: $showError) {
             Button("OK") {
                 errorMessage = nil
@@ -51,35 +50,11 @@ struct AuthenticationView: View {
         .onChange(of: errorMessage) { _, newValue in
             showError = newValue != nil
         }
-        .sheet(isPresented: $showEmailSignIn) {
-            EmailSignInView()
+        .sheet(isPresented: $showEmailContinue) {
+            EmailContinueView()
         }
-        .sheet(isPresented: $showEmailSignUp) {
-            EmailSignUpView()
-        }
-        .overlay {
-            // Show loading overlay during Apple Sign In or backend token exchange.
-            // Google's OAuth sheet manages its own UI — we only show this after it dismisses.
-            // Email sheets manage their own loading state — exclude them to avoid covering the form.
-            if (isSigningInWithApple || authService.isLoading) && !showEmailSignIn && !showEmailSignUp {
-                ZStack {
-                    Color.overlayScrim
-                        .ignoresSafeArea()
-                    
-                    VStack(spacing: 16) {
-                        ProgressView()
-                            .scaleEffect(1.5)
-                            .tint(.white)
-                        
-                        Text("Signing you in...")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                    }
-                    .padding(32)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-                }
-            }
-        }
+        // No blocking overlay — skeleton loaders on the destination screens
+        // handle the loading state after authentication completes.
     }
     
     // MARK: - Branding Section
@@ -87,7 +62,7 @@ struct AuthenticationView: View {
     private var brandingSection: some View {
         VStack(spacing: 16) {
             // App logo
-            Image("AppLogoColour")
+            Image("AppLogoWhite")
                 .resizable()
                 .scaledToFit()
                 .frame(width: 120, height: 120)
@@ -96,11 +71,12 @@ struct AuthenticationView: View {
             Text("Plank Challenge")
                 .font(.largeTitle)
                 .fontWeight(.bold)
+                .foregroundStyle(.white)
             
             // Tagline
             Text("One exercise.\nEvery day.\nThat's it.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.7))
                 .multilineTextAlignment(.center)
         }
         .padding(.horizontal, 32)
@@ -110,72 +86,86 @@ struct AuthenticationView: View {
     
     private var signInButtonsSection: some View {
         VStack(spacing: 16) {
-            // Sign in with Apple
-            SignInWithAppleButton(.signIn) { request in
+            // Continue with Apple
+            SignInWithAppleButton(.continue) { request in
                 request.requestedScopes = [.email, .fullName]
             } onCompletion: { result in
                 handleAppleSignIn(result)
             }
-            .signInWithAppleButtonStyle(.black)
+            .signInWithAppleButtonStyle(.white)
             .frame(height: 50)
             .cornerRadius(10)
             .disabled(isSigningInWithApple || authService.isLoading)
             
-            // Sign in with Google
+            // Continue with Google
             Button {
                 handleGoogleSignIn()
             } label: {
                 HStack(spacing: 10) {
-                    GoogleLogoMark()
-                        .frame(width: 20, height: 20)
-                     Text("Continue with Google")
-                         .fontWeight(.medium)
+                    if authService.isLoading {
+                        ProgressView()
+                            .tint(.black)
+                            .frame(width: 20, height: 20)
+                    } else {
+                        GoogleLogoMark()
+                            .frame(width: 20, height: 20)
+                    }
+                    Text(authService.isLoading ? "Signing you in..." : "Continue with Google")
+                        .fontWeight(.medium)
+                        .foregroundStyle(.black)
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
+                .background(.white, in: RoundedRectangle(cornerRadius: 10))
             }
-            .buttonStyle(.bordered)
-            .tint(.primary)
             .disabled(isSigningInWithApple || authService.isLoading)
             
-            // Sign in with email
+            // Continue with email
             Button {
-                showEmailSignIn = true
+                showEmailContinue = true
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "envelope")
+                        .foregroundStyle(.white)
                         .frame(width: 20, height: 20)
-                    Text("Sign in with email")
+                    Text("Continue with email")
                         .fontWeight(.medium)
+                        .foregroundStyle(.white)
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
+                .background(.white.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(.white.opacity(0.3), lineWidth: 1))
             }
-            .buttonStyle(.bordered)
-            .tint(.primary)
             .disabled(isSigningInWithApple || authService.isLoading)
         }
         .padding(.horizontal, 24)
     }
     
-    // MARK: - Sign Up Section
+    // MARK: - Terms Section
     
-    private var signUpSection: some View {
-        VStack(spacing: 8) {
+    private static let termsURL = URL(string: AppConfig.API.baseURL + "/legal/terms")
+    private static let privacyURL = URL(string: AppConfig.API.baseURL + "/legal/privacy")
+    
+    private var termsSection: some View {
+        VStack(spacing: 4) {
+            Text("By continuing, you agree to our")
             HStack(spacing: 4) {
-                Text("Don't have an account?")
-                    .foregroundStyle(.secondary)
-                Button("Create one") {
-                    showEmailSignUp = true
+                if let termsURL = Self.termsURL {
+                    Link("Terms of Service", destination: termsURL)
+                        .underline()
+                }
+                Text("and")
+                if let privacyURL = Self.privacyURL {
+                    Link("Privacy Policy", destination: privacyURL)
+                        .underline()
                 }
             }
-            .font(.subheadline)
-            
-            Text("By continuing, you agree to our Terms of Service and Privacy Policy.")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
         }
+        .font(.caption2)
+        .foregroundStyle(.white.opacity(0.5))
+        .tint(.white.opacity(0.8))
+        .multilineTextAlignment(.center)
         .padding(.horizontal, 32)
         .padding(.top, 24)
     }
@@ -297,7 +287,7 @@ private struct GoogleLogoMark: View {
                 
                 // White inner circle (creates the ring)
                 Circle()
-                    .fill(Color(.systemBackground))
+                    .fill(Color.white)
                     .frame(width: size * 0.55, height: size * 0.55)
                 
                 // Blue bar for the cross-bar of the G

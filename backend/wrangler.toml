@@ -41,6 +41,11 @@ queue = "badge-calculation"
 binding = "NOTIFICATION_QUEUE"
 queue = "push-notifications"
 
+# Cron triggers — runs every 5 minutes to send daily plank reminders
+# to users who haven't planked yet, at their chosen reminder time.
+[triggers]
+crons = ["*/5 * * * *"]
+
 # Environment variables (secrets should use wrangler secret)
 [vars]
 ENVIRONMENT = "production"

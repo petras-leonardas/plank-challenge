@@ -24,32 +24,53 @@ struct RootView: View {
     @AppStorage(AppConfig.UserDefaultsKeys.hasCompletedOnboarding)
     private var hasCompletedOnboarding = false
     
+    /// Set to `true` when the splash animation sequence finishes.
+    /// The splash stays visible until both this flag is true AND
+    /// the session restore has completed.
+    @State private var splashSequenceComplete = false
+    
+    /// True when the splash should still be visible — either the session
+    /// restore hasn't finished OR the splash animation hasn't completed.
+    private var showSplash: Bool {
+        if case .unknown = authService.state { return true }
+        return !splashSequenceComplete
+    }
+    
     var body: some View {
         Group {
-            switch authService.state {
-            case .unknown:
-                // Session restoration in progress
-                loadingView
-                
-            case .unauthenticated:
-                AuthenticationView()
-                    .transition(.opacity)
-                
-            case .authenticated:
-                if authService.needsOnboarding {
-                    // New user — walk them through the onboarding flow
-                    OnboardingContainerView()
+            if showSplash {
+                SplashSequenceView {
+                    splashSequenceComplete = true
+                }
+            } else {
+                switch authService.state {
+                case .unknown:
+                    // Unreachable — showSplash is true when state is .unknown.
+                    // Included for exhaustive switch.
+                    EmptyView()
+                    
+                case .unauthenticated:
+                    AuthenticationView()
                         .transition(.opacity)
-                } else {
-                    // Returning user — straight to the app
-                    MainTabView()
-                        .transition(.opacity)
+                    
+                case .authenticated:
+                    if authService.needsOnboarding {
+                        OnboardingContainerView()
+                            .transition(.opacity)
+                    } else {
+                        MainTabView()
+                            .transition(.opacity)
+                    }
                 }
             }
         }
+        .animation(.easeInOut(duration: 1.0), value: showSplash)
         .animation(.easeInOut(duration: 0.3), value: authService.state)
         .animation(.easeInOut(duration: 0.3), value: hasCompletedOnboarding)
         .task {
+            // Session restore runs concurrently with the splash animation.
+            // The splash stays until BOTH the animation sequence completes
+            // (via SplashSequenceView.onComplete) AND session restore finishes.
             await authService.restoreSession()
         }
         .onChange(of: authService.state) { _, newState in
@@ -76,7 +97,8 @@ struct RootView: View {
                     async let unreadFetch: () = {
                         await notificationService.fetchUnreadCount()
                     }()
-                    _ = await (streakFetch, plankFetch, badgeFetch, unreadFetch)
+                    async let tzSync: () = syncTimezoneAndReminders()
+                    _ = await (streakFetch, plankFetch, badgeFetch, unreadFetch, tzSync)
                 }
                 
             case .unauthenticated:
@@ -109,26 +131,26 @@ struct RootView: View {
         }
     }
     
-    // MARK: - Loading View
+    // MARK: - Post-Login Sync
     
-    private var loadingView: some View {
-        VStack(spacing: 20) {
-            // App logo
-            Image("AppLogoColour")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 100, height: 100)
-            
-            // Loading indicator
-            ProgressView()
-                .scaleEffect(1.2)
-            
-            Text("Loading...")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemBackground))
+    /// Syncs the device timezone and local reminder preferences to the backend
+    /// on every login. This ensures the cron job sends reminders at the correct
+    /// local time, and covers preferences set during onboarding before auth.
+    private func syncTimezoneAndReminders() async {
+        let tz = TimeZone.current.identifier
+        let service = NotificationService.shared
+        let enabled = service.isReminderEnabled
+        let time = enabled ? NotificationService.formatTimeForBackend(service.reminderTime) : nil
+        _ = try? await userService.updateProfile(
+            displayName: nil,
+            location: nil,
+            bio: nil,
+            preferredPlankType: nil,
+            plankGoalSeconds: nil,
+            reminderEnabled: enabled,
+            reminderTime: time,
+            timezone: tz
+        )
     }
 }
 
